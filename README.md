@@ -1,1 +1,0 @@
-# neoqs.github.io

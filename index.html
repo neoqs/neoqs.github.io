@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neo QS</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background-color: #f4f6f5;
+    color: #1a1a1a;
+    margin: 0;
+    padding: 40px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  img { width: 120px; margin-bottom: 20px; }
+  h1 { font-size: 2rem; color: #2e7d32; margin-bottom: 5px; }
+  h2 { margin-top: 40px; color: #1a1a1a; }
+  p { max-width: 500px; line-height: 1.5; color: #444; }
+  form {
+    background: #fff;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    width: 100%;
+    max-width: 420px;
+    text-align: left;
+  }
+  label { font-weight: 600; display: block; margin-top: 18px; margin-bottom: 6px; }
+  input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; }
+  fieldset { border: none; padding: 0; margin-top: 18px; }
+  legend { font-weight: 600; padding: 0; margin-bottom: 6px; }
+  .checkbox-group label { font-weight: 400; display: flex; align-items: center; margin-top: 8px; }
+  .checkbox-group input { width: auto; margin-right: 10px; }
+  button {
+    margin-top: 26px; width: 100%; padding: 14px;
+    background-color: #2e7d32; color: #fff; border: none;
+    border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer;
+  }
+  button:hover { background-color: #256428; }
+</style>
+</head>
+<body>
+  <img src="IMG_6948.png" alt="Neo QS logo">
+
+  <h1>Neo QS</h1>
+  <p>Bringing Quantity Surveying into the Future with AI</p>
+
+  <h2>What is Neo QS?</h2>
+  <p>Neo QS is an AI-powered quantity surveying platform designed to automate takeoffs, Bills of Quantities (BOQs), cost estimation, and quantity surveying spreadsheets. It also provides an intelligent AI assistant for project-specific guidance and integrates international measurement standards into a modern digital workflow.</p>
+  <p>Professional features will be available only to licensed/registered Quantity Surveyors to help maintain professional standards.</p>
+
+  <h2>Join the Waitlist</h2>
+  <form action="https://formspree.io/f/xrenannj" method="POST">
+    <input type="hidden" name="_next" value="https://neoqs.github.io/survey.html">
+
+    <label>Full Name</label>
+    <input type="text" name="full_name" required>
+
+    <label>Email Address</label>
+    <input type="email" name="email" required>
+			
+		<label>phone number</label>
+		<input type="phone number</label>
+			name="phone number" required>
+
+    <label>What best describes you?</label>
+    <select name="role" required>
+      <option value="">-- Select an option --</option>
+      <option value="Quantity Surveying Student">Quantity Surveying Student</option>
+      <option value="Graduate Quantity Surveyor">Graduate Quantity Surveyor</option>
+      <option value="Licensed/Registered Quantity Surveyor">Licensed/Registered Quantity Surveyor</option>
+      <option value="Quantity Surveying Lecturer">Quantity Surveying Lecturer</option>
+      <option value="Construction Professional">Construction Professional</option>
+      <option value="Other">Other</option>
+    </select>
+
+    <label>Which country do you study or practice in?</label>
+    <input type="text" name="country" required>
+
+    <fieldset>
+      <legend>Which Neo QS features are you most excited about?</legend>
+      <div class="checkbox-group">
+        <label><input type="checkbox" name="features" value="Quantity Surveying Spreadsheets"> Quantity Surveying Spreadsheets</label>
+        <label><input type="checkbox" name="features" value="Automated Takeoffs"> Automated Takeoffs</label>
+        <label><input type="checkbox" name="features" value="Automated BOQ Generation"> Automated BOQ Generation</label>
+        <label><input type="checkbox" name="features" value="Neo MateriX (Material Price Database)"> Neo MateriX (Material Price Database)</label>
+        <label><input type="checkbox" name="features" value="AI Quantity Surveying Assistant"> AI Quantity Surveying Assistant</label>
+        <label><input type="checkbox" name="features" value="Cost Estimation Tools"> Cost Estimation Tools</label>
+        <label><input type="checkbox" name="features" value="Project Management"> Project Management</label>
+      </div>
+    </fieldset>
+
+    <button type="submit">Join the Waitlist – Get Early Access</button>
+  </form>
+</body>
+</html>
