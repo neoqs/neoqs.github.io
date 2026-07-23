@@ -55,21 +55,18 @@
   <p>Professional features will be available only to licensed/registered Quantity Surveyors to help maintain professional standards.</p>
 
   <h2>Join the Waitlist</h2>
-  <form action="https://formspree.io/f/xrenannj" method="POST">
-    <input type="hidden" name="_next" value="https://neoqs.github.io/survey.html">
-
+  <form id="waitlistForm">
     <label>Full Name</label>
     <input type="text" name="full_name" required>
 
     <label>Email Address</label>
     <input type="email" name="email" required>
-			
-     
-     <label>Phone number</label>
-	  <input type="tel" name="phone number" required>
 
-	  <label>What best describes you?</label>
-    <select id="role" required>
+    <label>Phone Number</label>
+    <input type="tel" name="phone" required>
+
+    <label>What best describes you?</label>
+    <select name="role" required>
       <option value="">-- Select an option --</option>
       <option value="Quantity Surveying Student">Quantity Surveying Student</option>
       <option value="Graduate Quantity Surveyor">Graduate Quantity Surveyor</option>
@@ -78,8 +75,6 @@
       <option value="Construction Professional">Construction Professional</option>
       <option value="Other">Other</option>
     </select>
-
-
 
     <label>Which country do you study or practice in?</label>
     <input type="text" name="country" required>
@@ -99,5 +94,26 @@
 
     <button type="submit">Join the Waitlist – Get Early Access</button>
   </form>
+
+  <script>
+    const form = document.getElementById('waitlistForm');
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const data = new FormData(form);
+      fetch('https://formspree.io/f/xrenannj', {
+        method: 'POST',
+        body: data,
+        headers: { 'Accept': 'application/json' }
+      }).then(response => {
+        if (response.ok) {
+          window.location.href = 'survey.html';
+        } else {
+          alert('Something went wrong. Please try again.');
+        }
+      }).catch(() => {
+        alert('Something went wrong. Please try again.');
+      });
+    });
+  </script>
 </body>
 </html>
