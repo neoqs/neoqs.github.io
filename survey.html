@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neo QS Survey</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background-color: #f4f6f5;
+    color: #1a1a1a;
+    margin: 0;
+    padding: 40px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  h1 { color: #2e7d32; }
+  h2 { margin-top: 30px; }
+  p { max-width: 500px; line-height: 1.5; color: #444; }
+  form {
+    background: #fff;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    width: 100%;
+    max-width: 420px;
+    text-align: left;
+    margin-top: 20px;
+  }
+  label { font-weight: 600; display: block; margin-top: 18px; margin-bottom: 6px; }
+  input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; }
+  fieldset { border: none; padding: 0; margin-top: 18px; }
+  legend { font-weight: 600; padding: 0; margin-bottom: 6px; }
+  .option-group label { font-weight: 400; display: flex; align-items: center; margin-top: 8px; }
+  .option-group input { width: auto; margin-right: 10px; }
+  button {
+    margin-top: 26px; width: 100%; padding: 14px;
+    background-color: #2e7d32; color: #fff; border: none;
+    border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer;
+  }
+  button:hover { background-color: #256428; }
+</style>
+</head>
+<body>
+  <h1>🎉 You're on the Neo QS Waitlist!</h1>
+  <p>Thank you for joining the Neo QS community.</p>
+  <p>We're building Neo QS with feedback from quantity surveyors around the world. Help us shape the platform by answering a few optional questions. Estimated time: 2 minutes.</p>
+
+  <h2>Neo QS User Survey</h2>
+  <form action="https://formspree.io/f/xrenyzra" method="POST">
+
+    <fieldset>
+      <legend>1. Which software do you currently use for quantity surveying?</legend>
+      <div class="option-group">
+        <label><input type="checkbox" name="software" value="Microsoft Excel"> Microsoft Excel</label>
+        <label><input type="checkbox" name="software" value="CostX"> CostX</label>
+        <label><input type="checkbox" name="software" value="Cubit"> Cubit</label>
+        <label><input type="checkbox" name="software" value="Bluebeam Revu"> Bluebeam Revu</label>
+        <label><input type="checkbox" name="software" value="Autodesk Takeoff"> Autodesk Takeoff</label>
+        <label><input type="checkbox" name="software" value="Planswift"> Planswift</label>
+        <label><input type="checkbox" name="software" value="Other"> Other</label>
+      </div>
+    </fieldset>
+    <label>If Other, please specify</label>
+    <input type="text" name="software_other">
+
+    <label>2. How often do you use quantity surveying software?</label>
+    <select name="usage_frequency">
+      <option value="">-- Select an option --</option>
+      <option value="Daily">Daily</option>
+      <option value="A few times a week">A few times a week</option>
+      <option value="Weekly">Weekly</option>
+      <option value="Occasionally">Occasionally</option>
+    </select>
+
+    <label>3. Approximately how much do you spend on quantity surveying software each month?</label>
+    <select name="monthly_spend">
+      <option value="">-- Select an option --</option>
+      <option value="I don't currently pay for software">I don't currently pay for software</option>
+      <option value="Less than $20">Less than $20</option>
+      <option value="$20-$50">$20–$50</option>
+      <option value="$50-$100">$50–$100</option>
+      <option value="More than $100">More than $100</option>
+    </select>
+
+    <label>4. How long does it typically take you to complete a takeoff using your current workflow?</label>
+    <select name="takeoff_time">
+      <option value="">-- Select an option --</option>
+      <option value="Less than 30 minutes">Less than 30 minutes</option>
+      <option value="30 minutes-1 hour">30 minutes–1 hour</option>
+      <option value="1-3 hours">1–3 hours</option>
+      <option value="3-6 hours">3–6 hours</option>
+      <option value="More than 6 hours">More than 6 hours</option>
+    </select>
+
+    <label>5. What is your biggest challenge when preparing takeoffs or Bills of Quantities?</label>
+    <textarea name="biggest_challenge" rows="4"></textarea>
+
+    <label>6. Which Neo QS feature would save you the most time?</label>
+    <select name="most_time_saving_feature">
+      <option value="">-- Select an option --</option>
+      <option value="Quantity Surveying Spreadsheets">Quantity Surveying Spreadsheets</option>
+      <option value="Automated Takeoffs">Automated Takeoffs</option>
+      <option value="Automated BOQ Generation">Automated BOQ Generation</option>
+      <option value="Neo MateriX (Material Price Database)">Neo MateriX (Material Price Database)</option>
+      <option value="AI Quantity Surveying Assistant">AI Quantity Surveying Assistant</option>
+      <option value="Cost Estimation Tools">Cost Estimation Tools</option>
+      <option value="Project Management">Project Management</option>
+    </select>
+
+    <fieldset>
+      <legend>7. If Neo QS solved your biggest workflow challenges, would you consider paying for it?</legend>
+      <div class="option-group">
+        <label><input type="radio" name="would_pay" value="Yes"> Yes</label>
+        <label><input type="radio" name="would_pay" value="No"> No</label>
+        <label><input type="radio" name="would_pay" value="Maybe"> Maybe</label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>8. Would you be interested in becoming an early beta tester for Neo QS?</legend>
+      <div class="option-group">
+        <label><input type="radio" name="beta_tester" value="Yes"> Yes</label>
+        <label><input type="radio" name="beta_tester" value="No"> No</label>
+      </div>
+    </fieldset>
+
+    <label>9. Is there anything else you'd like Neo QS to include? (Optional)</label>
+    
