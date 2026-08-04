@@ -97,18 +97,33 @@
 
   <script>
     const form = document.getElementById('waitlistForm');
-    form.addEventListener('submit', function(e) {
-      e.preventDefault();
-      const data = new FormData(form);
-    body: JSON.stringify({
-  name: data.get('name'),
-  email: data.get('email'),
-  role: data.get('role') // match this to your actual form field names
-})
-});
-    
+form.addEventListener('submit', function(e) {
+  e.preventDefault();
+  const data = new FormData(form);
 
-      fetch('https://formspree.io/f/xrenannj', {
+  fetch('https://hooks.zapier.com/hooks/catch/28450575/469ab2z/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: data.get('full_name'),
+      email: data.get('email'),
+      phone: data.get('phone'),
+      role: data.get('role'),
+      country: data.get('country')
+    })
+  });
+
+  fetch('https://formspree.io/f/xrenannj', {
+    method: 'POST',
+    body: data,
+    headers: { 'Accept': 'application/json' }
+  }).then(response => {
+    if (response.ok) {
+      window.location.href = 'survey.html';
+    } else {
+
+    
+    fetch('https://formspree.io/f/xrenannj', {
         method: 'POST',
         body: data,
         headers: { 'Accept': 'application/json' }
