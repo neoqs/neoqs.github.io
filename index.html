@@ -100,8 +100,7 @@
 form.addEventListener('submit', function(e) {
   e.preventDefault();
   const data = new FormData(form);
-
-  fetch('https://hooks.zapier.com/hooks/catch/28450575/469ab2z/', {
+ fetch('https://hooks.zapier.com/hooks/catch/28450575/469ab2z/',{
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
