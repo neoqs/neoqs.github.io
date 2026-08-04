@@ -100,6 +100,17 @@
     form.addEventListener('submit', function(e) {
       e.preventDefault();
       const data = new FormData(form);
+      fetch('https://hooks.zapier.com/hooks/catch/28450575/469ab2z/', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+
+    body: JSON.stringify({
+  name: data.get('name'),
+  email: data.get('email'),
+  role: data.get('role') // match this to your actual form field names
+})
+});
+
       fetch('https://formspree.io/f/xrenannj', {
         method: 'POST',
         body: data,
