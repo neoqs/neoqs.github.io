@@ -121,22 +121,12 @@ form.addEventListener('submit', function(e) {
     if (response.ok) {
       window.location.href = 'survey.html';
     } else {
-
-    
-    fetch('https://formspree.io/f/xrenannj', {
-        method: 'POST',
-        body: data,
-        headers: { 'Accept': 'application/json' }
-      }).then(response => {
-        if (response.ok) {
-          window.location.href = 'survey.html';
-        } else {
-          alert('Something went wrong. Please try again.');
-        }
-      }).catch(() => {
-        alert('Something went wrong. Please try again.');
-      });
-    });
+      alert('Something went wrong. Please try again.');
+    }
+  }).catch(() => {
+    alert('Something went wrong. Please try again.');
+  });
+});
   </script>
 </body>
 </html>
