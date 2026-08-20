@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Neo QS - Measure</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>window.SUPABASE_SCRIPT_FAILED = false;</script>
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js" onerror="window.SUPABASE_SCRIPT_FAILED = true;"></script>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -262,10 +263,10 @@
       return;
     }
 
-    if (typeof window.supabase === 'undefined') {
+    if (window.SUPABASE_SCRIPT_FAILED || typeof window.supabase === 'undefined') {
       var b = document.getElementById('errorBanner');
       b.style.display = 'block';
-      b.textContent = '⚠️ Supabase library failed to load from CDN. Check your internet connection or try reloading.';
+      b.textContent = '⚠️ Supabase library failed to load from CDN (script tag error or blocked). Try a different network or reload.';
       document.getElementById('sheetBody').innerHTML =
         '<tr><td colspan="4" class="empty-state">Could not load Supabase library</td></tr>';
       return;
