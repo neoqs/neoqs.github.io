@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Test</title></head>
+<body style="font-family:sans-serif; padding:20px; background:#0d1117; color:white;">
+  <h1>JS Test Page</h1>
+  <p id="status">If you see this, HTML loaded. JS status: <span id="jsStatus">not yet run</span></p>
+  <button onclick="testClick()" style="padding:15px; font-size:16px;">Tap Me</button>
+  <p id="clickResult"></p>
+
+  <script>
+    document.getElementById('jsStatus').textContent = 'JS is running';
+
+    function testClick() {
+      document.getElementById('clickResult').textContent = 'Button click worked! Time: ' + new Date().toLocaleTimeString();
+    }
+  </script>
+</body>
+</html>
