@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Neo QS - Measure</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -62,6 +62,8 @@
 <div class="config-banner" id="configBanner">
   ⚠️ Supabase not connected. Edit the SUPABASE_URL and SUPABASE_KEY values at the top of the script below.
 </div>
+
+<div class="config-banner" id="errorBanner" style="background:#2d0d0d;border-color:#ff4d4d;color:#ffb3b3;"></div>
 
 <div class="card">
   <h2>Manual Entry</h2>
@@ -133,6 +135,15 @@
 </div>
 
 <script>
+  window.onerror = function(msg, url, line, col, error) {
+    var b = document.getElementById('errorBanner');
+    if (b) {
+      b.style.display = 'block';
+      b.textContent = '⚠️ Error: ' + msg + ' (line ' + line + ')';
+    }
+    return false;
+  };
+
   const SUPABASE_URL = "https://krnhvacnsluescndjobp.supabase.co";
   const SUPABASE_KEY = "sb_publishable_qJsuE50avRGjP44LddactA_C86KRBC_";
 
@@ -150,6 +161,7 @@
         '<tr><td colspan="4" class="empty-state">Connect Supabase to load data</td></tr>';
       return;
     }
+
     supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     await ensureProject();
     await loadMeasurementItems();
