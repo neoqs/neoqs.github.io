@@ -14,44 +14,131 @@
     margin: 0;
     padding: 16px;
   }
-  h1 { font-size: 20px; margin-bottom: 4px; }
-  .subtitle { color: #8b949e; font-size: 13px; margin-bottom: 20px; }
+  h1 {
+    font-size: 20px;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    color: #8b949e;
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
   .config-banner {
-    background: #3d2b00; border: 1px solid #9e6a00; color: #ffd479;
-    padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display: none;
+    background: #3d2b00;
+    border: 1px solid #9e6a00;
+    color: #ffd479;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 16px;
+    display: none;
   }
   .card {
-    background: #161b22; border: 1px solid #30363d; border-radius: 10px;
-    padding: 16px; margin-bottom: 16px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
   }
-  .card h2 { font-size: 15px; margin: 0 0 12px 0; color: #58a6ff; }
-  label { display: block; font-size: 12px; color: #8b949e; margin-bottom: 4px; margin-top: 10px; }
+  .card h2 {
+    font-size: 15px;
+    margin: 0 0 12px 0;
+    color: #58a6ff;
+  }
+  label {
+    display: block;
+    font-size: 12px;
+    color: #8b949e;
+    margin-bottom: 4px;
+    margin-top: 10px;
+  }
   input, select {
-    width: 100%; padding: 10px; background: #0d1117; border: 1px solid #30363d;
-    border-radius: 6px; color: #e6edf3; font-size: 15px;
+    width: 100%;
+    padding: 10px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #e6edf3;
+    font-size: 15px;
   }
-  input:focus, select:focus { outline: none; border-color: #58a6ff; }
-  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  input:focus, select:focus {
+    outline: none;
+    border-color: #58a6ff;
+  }
+  .row3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
   button {
-    width: 100%; padding: 12px; margin-top: 16px; background: #238636;
-    color: white; border: none; border-radius: 6px; font-size: 15px; font-weight: 600;
+    width: 100%;
+    padding: 12px;
+    margin-top: 16px;
+    background: #238636;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 600;
   }
   button:active { background: #1a6c2a; }
-  button.secondary { background: #21262d; border: 1px solid #30363d; }
-  button:disabled { background: #30363d; color: #6e7681; }
-  .file-input-wrap { margin-top: 10px; }
-  input[type="file"] { padding: 8px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #21262d; }
-  th { color: #8b949e; font-weight: 500; font-size: 11px; text-transform: uppercase; }
+  button.secondary {
+    background: #21262d;
+    border: 1px solid #30363d;
+  }
+  button:disabled {
+    background: #30363d;
+    color: #6e7681;
+  }
+  .file-input-wrap {
+    margin-top: 10px;
+  }
+  input[type="file"] {
+    padding: 8px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 6px;
+    border-bottom: 1px solid #21262d;
+  }
+  th {
+    color: #8b949e;
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+  }
   .qty { color: #7ee787; font-weight: 600; }
-  .source-tag { font-size: 10px; padding: 2px 6px; border-radius: 10px; background: #30363d; color: #8b949e; }
+  .source-tag {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background: #30363d;
+    color: #8b949e;
+  }
   .source-tag.import { background: #1f3a5f; color: #79c0ff; }
-  .empty-state { text-align: center; color: #6e7681; padding: 20px; font-size: 13px; }
-  .status { font-size: 12px; margin-top: 8px; padding: 8px; border-radius: 6px; display: none; }
+  .empty-state {
+    text-align: center;
+    color: #6e7681;
+    padding: 20px;
+    font-size: 13px;
+  }
+  .status {
+    font-size: 12px;
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 6px;
+    display: none;
+  }
   .status.success { background: #0d2818; color: #7ee787; display: block; }
   .status.error { background: #2d0d0d; color: #ff7b72; display: block; }
-  .table-scroll { overflow-x: auto; }
+  .table-scroll {
+    overflow-x: auto;
+  }
 </style>
 </head>
 <body>
@@ -65,6 +152,7 @@
 
 <div class="config-banner" id="errorBanner" style="background:#2d0d0d;border-color:#ff4d4d;color:#ffb3b3;"></div>
 
+<!-- Manual Entry -->
 <div class="card">
   <h2>Manual Entry</h2>
   <label>Description</label>
@@ -105,6 +193,7 @@
   <div class="status" id="manualStatus"></div>
 </div>
 
+<!-- PlanSwift CSV Import -->
 <div class="card">
   <h2>PlanSwift CSV Import</h2>
   <label>Upload PlanSwift export (.csv)</label>
@@ -115,6 +204,7 @@
   <div class="status" id="importStatus"></div>
 </div>
 
+<!-- Measurement Sheet -->
 <div class="card">
   <h2>Measurement Sheet</h2>
   <div class="table-scroll">
@@ -139,13 +229,23 @@
     var b = document.getElementById('errorBanner');
     if (b) {
       b.style.display = 'block';
-      b.textContent = '⚠️ Error: ' + msg + ' (line ' + line + ')';
+      b.textContent = '⚠️ Script error: ' + msg + ' (line ' + line + ')';
     }
     return false;
   };
 
+  window.addEventListener('unhandledrejection', function(event) {
+    var b = document.getElementById('errorBanner');
+    if (b) {
+      b.style.display = 'block';
+      b.textContent = '⚠️ Network/Promise error: ' + (event.reason && event.reason.message ? event.reason.message : JSON.stringify(event.reason));
+    }
+  });
+
+  // ===== CONFIG: paste your Supabase Project URL and Publishable key here =====
   const SUPABASE_URL = "https://krnhvacnsluescndjobp.supabase.co";
   const SUPABASE_KEY = "sb_publishable_qJsuE50avRGjP44LddactA_C86KRBC_";
+  // ==============================================================================
 
   let supabase;
   let currentProjectId = null;
@@ -162,11 +262,21 @@
       return;
     }
 
+    if (typeof window.supabase === 'undefined') {
+      var b = document.getElementById('errorBanner');
+      b.style.display = 'block';
+      b.textContent = '⚠️ Supabase library failed to load from CDN. Check your internet connection or try reloading.';
+      document.getElementById('sheetBody').innerHTML =
+        '<tr><td colspan="4" class="empty-state">Could not load Supabase library</td></tr>';
+      return;
+    }
+
     supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     await ensureProject();
     await loadMeasurementItems();
   }
 
+  // Get or create a default project so items have somewhere to live
   async function ensureProject() {
     const { data: existing, error } = await supabase
       .from('projects')
@@ -294,6 +404,8 @@
       return;
     }
 
+    // Expected PlanSwift-style columns: description, unit, quantity (adjust as needed
+    // once we confirm your exact PlanSwift export column names)
     const items = rows.map(r => ({
       project_id: currentProjectId,
       description: r.description || r.item || 'Imported item',
