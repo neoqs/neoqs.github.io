@@ -4,179 +4,51 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Neo QS - Measure</title>
-<script>window.SUPABASE_SCRIPT_FAILED = false;</script>
-<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js" onerror="window.SUPABASE_SCRIPT_FAILED = true;"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   * { box-sizing: border-box; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: #0d1117;
-    color: #e6edf3;
-    margin: 0;
-    padding: 16px;
-  }
-  h1 {
-    font-size: 20px;
-    margin-bottom: 4px;
-  }
-  .subtitle {
-    color: #8b949e;
-    font-size: 13px;
-    margin-bottom: 20px;
-  }
-  .config-banner {
-    background: #3d2b00;
-    border: 1px solid #9e6a00;
-    color: #ffd479;
-    padding: 12px;
-    border-radius: 8px;
-    font-size: 13px;
-    margin-bottom: 16px;
-    display: none;
-  }
-  .card {
-    background: #161b22;
-    border: 1px solid #30363d;
-    border-radius: 10px;
-    padding: 16px;
-    margin-bottom: 16px;
-  }
-  .card h2 {
-    font-size: 15px;
-    margin: 0 0 12px 0;
-    color: #58a6ff;
-  }
-  label {
-    display: block;
-    font-size: 12px;
-    color: #8b949e;
-    margin-bottom: 4px;
-    margin-top: 10px;
-  }
-  input, select {
-    width: 100%;
-    padding: 10px;
-    background: #0d1117;
-    border: 1px solid #30363d;
-    border-radius: 6px;
-    color: #e6edf3;
-    font-size: 15px;
-  }
-  input:focus, select:focus {
-    outline: none;
-    border-color: #58a6ff;
-  }
-  .row3 {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 8px;
-  }
-  button {
-    width: 100%;
-    padding: 12px;
-    margin-top: 16px;
-    background: #238636;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    font-size: 15px;
-    font-weight: 600;
-  }
-  button:active { background: #1a6c2a; }
-  button.secondary {
-    background: #21262d;
-    border: 1px solid #30363d;
-  }
-  button:disabled {
-    background: #30363d;
-    color: #6e7681;
-  }
-  .file-input-wrap {
-    margin-top: 10px;
-  }
-  input[type="file"] {
-    padding: 8px;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-  th, td {
-    text-align: left;
-    padding: 8px 6px;
-    border-bottom: 1px solid #21262d;
-  }
-  th {
-    color: #8b949e;
-    font-weight: 500;
-    font-size: 11px;
-    text-transform: uppercase;
-  }
+  body { font-family: -apple-system, sans-serif; background: #0d1117; color: #e6edf3; margin: 0; padding: 16px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .subtitle { color: #8b949e; font-size: 13px; margin-bottom: 20px; }
+  .banner { padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display: none; }
+  .banner.error { background: #2d0d0d; border: 1px solid #ff4d4d; color: #ffb3b3; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .card h2 { font-size: 15px; margin: 0 0 12px 0; color: #58a6ff; }
+  label { display: block; font-size: 12px; color: #8b949e; margin-bottom: 4px; margin-top: 10px; }
+  input, select { width: 100%; padding: 10px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 15px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  button { width: 100%; padding: 12px; margin-top: 16px; background: #238636; color: white; border: none; border-radius: 6px; font-size: 15px; font-weight: 600; }
+  button.secondary { background: #21262d; border: 1px solid #30363d; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 500; font-size: 11px; text-transform: uppercase; }
   .qty { color: #7ee787; font-weight: 600; }
-  .source-tag {
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 10px;
-    background: #30363d;
-    color: #8b949e;
-  }
+  .source-tag { font-size: 10px; padding: 2px 6px; border-radius: 10px; background: #30363d; color: #8b949e; }
   .source-tag.import { background: #1f3a5f; color: #79c0ff; }
-  .empty-state {
-    text-align: center;
-    color: #6e7681;
-    padding: 20px;
-    font-size: 13px;
-  }
-  .status {
-    font-size: 12px;
-    margin-top: 8px;
-    padding: 8px;
-    border-radius: 6px;
-    display: none;
-  }
+  .empty-state { text-align: center; color: #6e7681; padding: 20px; font-size: 13px; }
+  .status { font-size: 12px; margin-top: 8px; padding: 8px; border-radius: 6px; display: none; }
   .status.success { background: #0d2818; color: #7ee787; display: block; }
   .status.error { background: #2d0d0d; color: #ff7b72; display: block; }
-  .table-scroll {
-    overflow-x: auto;
-  }
+  .table-scroll { overflow-x: auto; }
 </style>
 </head>
 <body>
 
 <h1>Neo QS — Measure</h1>
 <div class="subtitle">Measurement Sheet · manual entry + PlanSwift CSV import</div>
+<div class="banner error" id="errorBanner"></div>
 
-<div class="config-banner" id="configBanner">
-  ⚠️ Supabase not connected. Edit the SUPABASE_URL and SUPABASE_KEY values at the top of the script below.
-</div>
-
-<div class="config-banner" id="errorBanner" style="background:#2d0d0d;border-color:#ff4d4d;color:#ffb3b3;"></div>
-
-<!-- Manual Entry -->
 <div class="card">
   <h2>Manual Entry</h2>
   <label>Description</label>
   <input type="text" id="description" placeholder="e.g. Excavate foundation trench">
-
   <label>NRM2 Category</label>
   <input type="text" id="nrm2_category" placeholder="e.g. Groundworks">
-
   <div class="row3">
-    <div>
-      <label>Length (m)</label>
-      <input type="number" step="any" id="length">
-    </div>
-    <div>
-      <label>Width (m)</label>
-      <input type="number" step="any" id="width">
-    </div>
-    <div>
-      <label>Height (m)</label>
-      <input type="number" step="any" id="height">
-    </div>
+    <div><label>Length (m)</label><input type="number" step="any" id="length"></div>
+    <div><label>Width (m)</label><input type="number" step="any" id="width"></div>
+    <div><label>Height (m)</label><input type="number" step="any" id="height"></div>
   </div>
-
   <label>Unit</label>
   <select id="unit">
     <option value="m3">m³ (cubic metres)</option>
@@ -186,282 +58,40 @@
     <option value="kg">kg</option>
     <option value="item">item</option>
   </select>
-
   <label>Quantity (auto-calculated if dimensions given, or enter manually)</label>
-  <input type="number" step="any" id="quantity" placeholder="Leave blank to auto-calculate from L×W×H">
-
+  <input type="number" step="any" id="quantity" placeholder="Leave blank to auto-calculate">
   <button onclick="addMeasurementItem()">Add to Measurement Sheet</button>
   <div class="status" id="manualStatus"></div>
 </div>
 
-<!-- PlanSwift CSV Import -->
 <div class="card">
   <h2>PlanSwift CSV Import</h2>
   <label>Upload PlanSwift export (.csv)</label>
-  <div class="file-input-wrap">
-    <input type="file" id="csvFile" accept=".csv">
-  </div>
+  <input type="file" id="csvFile" accept=".csv" style="margin-top:10px;">
   <button class="secondary" onclick="importCSV()">Import to Measurement Sheet</button>
   <div class="status" id="importStatus"></div>
 </div>
 
-<!-- Measurement Sheet -->
 <div class="card">
   <h2>Measurement Sheet</h2>
   <div class="table-scroll">
-    <table id="sheetTable">
-      <thead>
-        <tr>
-          <th>Description</th>
-          <th>Unit</th>
-          <th>Qty</th>
-          <th>Source</th>
-        </tr>
-      </thead>
-      <tbody id="sheetBody">
-        <tr><td colspan="4" class="empty-state">Loading…</td></tr>
-      </tbody>
+    <table>
+      <thead><tr><th>Description</th><th>Unit</th><th>Qty</th><th>Source</th></tr></thead>
+      <tbody id="sheetBody"><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
     </table>
   </div>
 </div>
 
 <script>
-  window.onerror = function(msg, url, line, col, error) {
-    var b = document.getElementById('errorBanner');
-    if (b) {
-      b.style.display = 'block';
-      b.textContent = '⚠️ Script error: ' + msg + ' (line ' + line + ')';
-    }
-    return false;
-  };
-
-  window.addEventListener('unhandledrejection', function(event) {
-    var b = document.getElementById('errorBanner');
-    if (b) {
-      b.style.display = 'block';
-      b.textContent = '⚠️ Network/Promise error: ' + (event.reason && event.reason.message ? event.reason.message : JSON.stringify(event.reason));
-    }
-  });
-
-  // ===== CONFIG: paste your Supabase Project URL and Publishable key here =====
   const SUPABASE_URL = "https://krnhvacnsluescndjobp.supabase.co";
   const SUPABASE_KEY = "sb_publishable_qJsuE50avRGjP44LddactA_C86KRBC_";
-  // ==============================================================================
-
   let supabase;
   let currentProjectId = null;
 
-  function isConfigured() {
-    return SUPABASE_URL.startsWith("https://") && SUPABASE_KEY.startsWith("sb_publis");
-  }
-
-  async function init() {
-    if (!isConfigured()) {
-      document.getElementById('configBanner').style.display = 'block';
-      document.getElementById('sheetBody').innerHTML =
-        '<tr><td colspan="4" class="empty-state">Connect Supabase to load data</td></tr>';
-      return;
-    }
-
-    if (window.SUPABASE_SCRIPT_FAILED || typeof window.supabase === 'undefined') {
-      var b = document.getElementById('errorBanner');
-      b.style.display = 'block';
-      b.textContent = '⚠️ Supabase library failed to load from CDN (script tag error or blocked). Try a different network or reload.';
-      document.getElementById('sheetBody').innerHTML =
-        '<tr><td colspan="4" class="empty-state">Could not load Supabase library</td></tr>';
-      return;
-    }
-
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    await ensureProject();
-    await loadMeasurementItems();
-  }
-
-  // Get or create a default project so items have somewhere to live
-  async function ensureProject() {
-    const { data: existing, error } = await supabase
-      .from('projects')
-      .select('id')
-      .limit(1);
-
-    if (error) {
-      showStatus('manualStatus', 'error', 'Could not connect to Supabase: ' + error.message);
-      return;
-    }
-
-    if (existing && existing.length > 0) {
-      currentProjectId = existing[0].id;
-    } else {
-      const { data: created, error: createErr } = await supabase
-        .from('projects')
-        .insert({ name: 'My First Project' })
-        .select()
-        .single();
-      if (createErr) {
-        showStatus('manualStatus', 'error', 'Could not create project: ' + createErr.message);
-        return;
-      }
-      currentProjectId = created.id;
-    }
-  }
-
-  function calcQuantity(unit, length, width, height) {
-    const l = parseFloat(length), w = parseFloat(width), h = parseFloat(height);
-    if (unit === 'm3' && l && w && h) return l * w * h;
-    if (unit === 'm2' && l && w) return l * w;
-    if (unit === 'm' && l) return l;
-    return null;
-  }
-
-  async function addMeasurementItem() {
-    if (!currentProjectId) {
-      showStatus('manualStatus', 'error', 'Not connected to a project yet.');
-      return;
-    }
-
-    const description = document.getElementById('description').value.trim();
-    const nrm2_category = document.getElementById('nrm2_category').value.trim();
-    const length = document.getElementById('length').value;
-    const width = document.getElementById('width').value;
-    const height = document.getElementById('height').value;
-    const unit = document.getElementById('unit').value;
-    let quantity = document.getElementById('quantity').value;
-
-    if (!description) {
-      showStatus('manualStatus', 'error', 'Description is required.');
-      return;
-    }
-
-    if (!quantity) {
-      const calc = calcQuantity(unit, length, width, height);
-      if (calc !== null) {
-        quantity = calc;
-      } else {
-        showStatus('manualStatus', 'error', 'Enter a quantity, or enough dimensions to calculate one.');
-        return;
-      }
-    }
-
-    const { error } = await supabase.from('measurement_items').insert({
-      project_id: currentProjectId,
-      description,
-      nrm2_category: nrm2_category || null,
-      unit,
-      length: length || null,
-      width: width || null,
-      height: height || null,
-      quantity: parseFloat(quantity),
-      source: 'manual'
-    });
-
-    if (error) {
-      showStatus('manualStatus', 'error', 'Error: ' + error.message);
-      return;
-    }
-
-    showStatus('manualStatus', 'success', 'Added to Measurement Sheet.');
-    document.getElementById('description').value = '';
-    document.getElementById('nrm2_category').value = '';
-    document.getElementById('length').value = '';
-    document.getElementById('width').value = '';
-    document.getElementById('height').value = '';
-    document.getElementById('quantity').value = '';
-
-    loadMeasurementItems();
-  }
-
-  function parseCSV(text) {
-    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
-    if (lines.length < 2) return [];
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-    const rows = [];
-    for (let i = 1; i < lines.length; i++) {
-      const vals = lines[i].split(',');
-      const row = {};
-      headers.forEach((h, idx) => row[h] = (vals[idx] || '').trim());
-      rows.push(row);
-    }
-    return rows;
-  }
-
-  async function importCSV() {
-    if (!currentProjectId) {
-      showStatus('importStatus', 'error', 'Not connected to a project yet.');
-      return;
-    }
-
-    const fileInput = document.getElementById('csvFile');
-    if (!fileInput.files.length) {
-      showStatus('importStatus', 'error', 'Choose a CSV file first.');
-      return;
-    }
-
-    const file = fileInput.files[0];
-    const text = await file.text();
-    const rows = parseCSV(text);
-
-    if (rows.length === 0) {
-      showStatus('importStatus', 'error', 'No rows found in CSV.');
-      return;
-    }
-
-    // Expected PlanSwift-style columns: description, unit, quantity (adjust as needed
-    // once we confirm your exact PlanSwift export column names)
-    const items = rows.map(r => ({
-      project_id: currentProjectId,
-      description: r.description || r.item || 'Imported item',
-      nrm2_category: r.category || r.nrm2_category || null,
-      unit: r.unit || 'item',
-      quantity: parseFloat(r.quantity || r.qty || 0),
-      source: 'planswift_import'
-    })).filter(i => i.quantity > 0);
-
-    if (items.length === 0) {
-      showStatus('importStatus', 'error', 'Could not find valid quantity data. Check CSV column names.');
-      return;
-    }
-
-    const { error } = await supabase.from('measurement_items').insert(items);
-
-    if (error) {
-      showStatus('importStatus', 'error', 'Import error: ' + error.message);
-      return;
-    }
-
-    showStatus('importStatus', 'success', `Imported ${items.length} item(s) to Measurement Sheet.`);
-    fileInput.value = '';
-    loadMeasurementItems();
-  }
-
-  async function loadMeasurementItems() {
-    if (!currentProjectId) return;
-
-    const { data, error } = await supabase
-      .from('measurement_items')
-      .select('*')
-      .eq('project_id', currentProjectId)
-      .order('created_at', { ascending: false });
-
-    const tbody = document.getElementById('sheetBody');
-
-    if (error) {
-      tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Error loading data: ${error.message}</td></tr>`;
-      return;
-    }
-
-    if (!data || data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No items yet — add one above.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = data.map(item => `
-      <tr>
-        <td>${escapeHtml(item.description)}</td>
-        <td>${escapeHtml(item.unit)}</td>
-        <td class="qty">${Number(item.quantity).toFixed(2)}</td>
-        <td><span class="source-tag ${item.source === 'planswift_import' ? 'import' : ''}">${item.source === 'planswift_import' ? 'PlanSwift' : 'Manual'}</span></td>
-      </tr>
-    `).join('');
+  function showError(msg) {
+    const b = document.getElementById('errorBanner');
+    b.style.display = 'block';
+    b.textContent = '⚠️ ' + msg;
   }
 
   function showStatus(elId, type, msg) {
@@ -475,6 +105,109 @@
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+  }
+
+  function calcQuantity(unit, length, width, height) {
+    const l = parseFloat(length), w = parseFloat(width), h = parseFloat(height);
+    if (unit === 'm3' && l && w && h) return l * w * h;
+    if (unit === 'm2' && l && w) return l * w;
+    if (unit === 'm' && l) return l;
+    return null;
+  }
+
+  async function ensureProject() {
+    const { data: existing, error } = await supabase.from('projects').select('id').limit(1);
+    if (error) { showError('Could not connect: ' + error.message); return; }
+    if (existing && existing.length > 0) {
+      currentProjectId = existing[0].id;
+    } else {
+      const { data: created, error: createErr } = await supabase.from('projects').insert({ name: 'My First Project' }).select().single();
+      if (createErr) { showError('Could not create project: ' + createErr.message); return; }
+      currentProjectId = created.id;
+    }
+  }
+
+  async function loadMeasurementItems() {
+    if (!currentProjectId) return;
+    const { data, error } = await supabase.from('measurement_items').select('*').eq('project_id', currentProjectId).order('created_at', { ascending: false });
+    const tbody = document.getElementById('sheetBody');
+    if (error) { tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Error: ${error.message}</td></tr>`; return; }
+    if (!data || data.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No items yet — add one above.</td></tr>'; return; }
+    tbody.innerHTML = data.map(item => `
+      <tr>
+        <td>${escapeHtml(item.description)}</td>
+        <td>${escapeHtml(item.unit)}</td>
+        <td class="qty">${Number(item.quantity).toFixed(2)}</td>
+        <td><span class="source-tag ${item.source === 'planswift_import' ? 'import' : ''}">${item.source === 'planswift_import' ? 'PlanSwift' : 'Manual'}</span></td>
+      </tr>`).join('');
+  }
+
+  async function addMeasurementItem() {
+    if (!currentProjectId) { showStatus('manualStatus', 'error', 'Not connected yet.'); return; }
+    const description = document.getElementById('description').value.trim();
+    const nrm2_category = document.getElementById('nrm2_category').value.trim();
+    const length = document.getElementById('length').value;
+    const width = document.getElementById('width').value;
+    const height = document.getElementById('height').value;
+    const unit = document.getElementById('unit').value;
+    let quantity = document.getElementById('quantity').value;
+    if (!description) { showStatus('manualStatus', 'error', 'Description is required.'); return; }
+    if (!quantity) {
+      const calc = calcQuantity(unit, length, width, height);
+      if (calc !== null) { quantity = calc; }
+      else { showStatus('manualStatus', 'error', 'Enter a quantity or dimensions.'); return; }
+    }
+    const { error } = await supabase.from('measurement_items').insert({
+      project_id: currentProjectId, description, nrm2_category: nrm2_category || null,
+      unit, length: length || null, width: width || null, height: height || null,
+      quantity: parseFloat(quantity), source: 'manual'
+    });
+    if (error) { showStatus('manualStatus', 'error', 'Error: ' + error.message); return; }
+    showStatus('manualStatus', 'success', 'Added to Measurement Sheet.');
+    ['description','nrm2_category','length','width','height','quantity'].forEach(id => document.getElementById(id).value = '');
+    loadMeasurementItems();
+  }
+
+  function parseCSV(text) {
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    return lines.slice(1).map(line => {
+      const vals = line.split(',');
+      const row = {};
+      headers.forEach((h, idx) => row[h] = (vals[idx] || '').trim());
+      return row;
+    });
+  }
+
+  async function importCSV() {
+    if (!currentProjectId) { showStatus('importStatus', 'error', 'Not connected yet.'); return; }
+    const fileInput = document.getElementById('csvFile');
+    if (!fileInput.files.length) { showStatus('importStatus', 'error', 'Choose a CSV file first.'); return; }
+    const text = await fileInput.files[0].text();
+    const rows = parseCSV(text);
+    if (rows.length === 0) { showStatus('importStatus', 'error', 'No rows found.'); return; }
+    const items = rows.map(r => ({
+      project_id: currentProjectId,
+      description: r.description || r.item || 'Imported item',
+      nrm2_category: r.category || r.nrm2_category || null,
+      unit: r.unit || 'item',
+      quantity: parseFloat(r.quantity || r.qty || 0),
+      source: 'planswift_import'
+    })).filter(i => i.quantity > 0);
+    if (items.length === 0) { showStatus('importStatus', 'error', 'No valid quantity data found.'); return; }
+    const { error } = await supabase.from('measurement_items').insert(items);
+    if (error) { showStatus('importStatus', 'error', 'Import error: ' + error.message); return; }
+    showStatus('importStatus', 'success', `Imported ${items.length} item(s).`);
+    fileInput.value = '';
+    loadMeasurementItems();
+  }
+
+  async function init() {
+    if (typeof window.supabase === 'undefined') { showError('Supabase library failed to load.'); return; }
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    await ensureProject();
+    await loadMeasurementItems();
   }
 
   init();
