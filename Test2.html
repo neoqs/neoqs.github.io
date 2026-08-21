@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Supabase Test</title></head>
+<body style="font-family:sans-serif; padding:20px; background:#0d1117; color:white;">
+  <h1>Supabase Connection Test</h1>
+  <p id="step1">Step 1: Loading script tag...</p>
+  <p id="step2">Step 2: not reached yet</p>
+  <p id="step3">Step 3: not reached yet</p>
+
+  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script>
+    document.getElementById('step1').textContent = 'Step 1: Script tag executed (this line ran)';
+
+    if (typeof window.supabase === 'undefined') {
+      document.getElementById('step2').textContent = 'Step 2: FAILED - window.supabase is undefined. Library did not load.';
+      document.getElementById('step2').style.color = 'red';
+    } else {
+      document.getElementById('step2').textContent = 'Step 2: SUCCESS - window.supabase exists.';
+      document.getElementById('step2').style.color = 'lightgreen';
+
+      try {
+        const client = window.supabase.createClient(
+          'https://krnhvacnsluescndjobp.supabase.co',
+          'sb_publishable_qJsuE50avRGjP44LddactA_C86KRBC_'
+        );
+        document.getElementById('step3').textContent = 'Step 3: Client created. Now testing a real query...';
+
+        client.from('projects').select('id').limit(1).then(function(result) {
+          if (result.error) {
+            document.getElementById('step3').textContent = 'Step 3: Query FAILED - ' + result.error.message;
+            document.getElementById('step3').style.color = 'red';
+          } else {
+            document.getElementById('step3').textContent = 'Step 3: Query SUCCESS - got ' + result.data.length + ' row(s) back.';
+            document.getElementById('step3').style.color = 'lightgreen';
+          }
+        }).catch(function(err) {
+          document.getElementById('step3').textContent = 'Step 3: Query THREW error - ' + err.message;
+          document.getElementById('step3').style.color = 'red';
+        });
+      } catch (e) {
+        document.getElementById('step3').textContent = 'Step 3: createClient THREW - ' + e.message;
+        document.getElementById('step3').style.color = 'red';
+      }
+    }
+  </script>
+</body>
+</html>
