@@ -256,6 +256,28 @@
     }
   }
 
+  let clearArmed = false;
+
+  async function clearAllBOQ() {
+    if (!currentProjectId) { showStatus('clearStatus', 'error', 'Not connected yet.'); return; }
+    const btn = event.target;
+    if (!clearArmed) {
+      clearArmed = true;
+      btn.textContent = 'Tap again to confirm delete';
+      setTimeout(() => { clearArmed = false; btn.textContent = 'Clear All BOQ Items'; }, 4000);
+      return;
+    }
+    clearArmed = false;
+    btn.textContent = 'Clear All BOQ Items';
+    try {
+      await supaDelete(`boq_items?project_id=eq.${currentProjectId}`);
+      showStatus('clearStatus', 'success', 'All BOQ items cleared.');
+      loadBOQ();
+    } catch (e) {
+      showStatus('clearStatus', 'error', 'Error: ' + e.message);
+    }
+  }
+
   async function generateBOQ() {
     if (!currentProjectId) { showStatus('genStatus', 'error', 'Not connected yet.'); return; }
     try {
