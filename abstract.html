@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neo QS - Abstract</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, sans-serif; background: #0d1117; color: #e6edf3; margin: 0; padding: 16px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .subtitle { color: #8b949e; font-size: 13px; margin-bottom: 20px; }
+  .banner { padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display: none; }
+  .banner.error { background: #2d0d0d; border: 1px solid #ff4d4d; color: #ffb3b3; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .card h2 { font-size: 15px; margin: 0 0 12px 0; color: #58a6ff; }
+  .card p.hint { color: #8b949e; font-size: 12px; margin: 0 0 12px 0; }
+  button { width: 100%; padding: 12px; background: #238636; color: white; border: none; border-radius: 6px; font-size: 15px; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 500; font-size: 11px; text-transform: uppercase; }
+  .qty { color: #7ee787; font-weight: 600; }
+  .cat-tag { font-size: 10px; padding: 2px 6px; border-radius: 10px; background: #30363d; color: #8b949e; }
+  .empty-state { text-align: center; color: #6e7681; padding: 20px; font-size: 13px; }
+  .status { font-size: 12px; margin-top: 8px; padding: 8px; border-radius: 6px; display: none; }
+  .status.success { background: #0d2818; color: #7ee787; display: block; }
+  .status.error { background: #2d0d0d; color: #ff7b72; display: block; }
+  .table-scroll { overflow-x: auto; }
+  .delete-btn { width: auto; padding: 4px 10px; margin: 0; background: #5c1414; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<h1>Neo QS — Abstract</h1>
+<div class="subtitle">Consolidated from your Measurement Sheet, grouped by NRM2 category</div>
+<div class="banner error" id="errorBanner"></div>
+
+<div class="card">
+  <h2>Generate Abstract</h2>
+  <p class="hint">This regroups all current Measurement Sheet items by category, description, and unit, summing their quantities. Running it again replaces the current Abstract with a fresh one from the latest measurements.</p>
+  <button onclick="generateAbstract()">Consolidate Measurements into Abstract</button>
+  <div class="status" id="genStatus"></div>
+</div>
+
+<div class="card">
+  <h2>Abstract</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Description</th><th>Category</th><th>Unit</th><th>Total Qty</th><th></th></tr></thead>
+      <tbody id="abstractBody"><tr><td colspan="5" class="empty-state">Fetching your abstract…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL = "https://krnhvacnsluescndjobp.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_qJsuE50avRGjP44LddactA_C86KRBC_";
+  let currentProjectId = null;
+
+  function showError(msg) {
+    const b = document.getElementById('errorBanner');
+    b.style.display = 'block';
+    b.textContent = '⚠️ ' + msg;
+  }
+
+  function showStatus(elId, type, msg) {
+    const el = document.getElementById(elId);
+    el.className = 'status ' + type;
+    el.textContent = msg;
+    setTimeout(() => { el.style.display = 'none'; }, 5000);
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  async function supaGet(path) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
+  async function supaPost(path, body, preferReturn) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': preferReturn ? 'return=representation' : 'return=minimal'
+      },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return preferReturn ? res.json() : null;
+  }
+
+  async function supaDelete(path) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+    });
+    if (!res.ok) throw new Error(await res.text());
+  }
+
+  async function ensureProject() {
+    try {
+      const existing = await supaGet('projects?select=id&limit=1');
+      if (existing && existing.length > 0) {
+        currentProjectId = existing[0].id;
+      } else {
+        showError('No project found. Add some measurements first in the Measure page.');
+      }
+    } catch (e) {
+      showError('Could not connect to Supabase: ' + e.message);
+    }
+  }
+
+  async function loadAbstract() {
+    if (!currentProjectId) return;
+    const tbody = document.getElementById('abstractBody');
+    try {
+      const data = await supaGet(`abstract_items?select=*&project_id=eq.${currentProjectId}&order=nrm2_category.asc,description.asc`);
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No abstract yet — generate one above from your measurements.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(item => `
+        <tr>
+          <td>${escapeHtml(item.description)}</td>
+          <td>${item.nrm2_category ? `<span class="cat-tag">${escapeHtml(item.nrm2_category)}</span>` : '—'}</td>
+          <td>${escapeHtml(item.unit)}</td>
+          <td class="qty">${Number(item.total_quantity).toFixed(2)}</td>
+          <td><button class="delete-btn" onclick="deleteAbstractItem('${item.id}')">✕</button></td>
+        </tr>`).join('');
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Error: ${e.message}</td></tr>`;
+    }
+  }
+
+  async function deleteAbstractItem(id) {
+    if (!confirm('Delete this abstract line? (Does not affect your Measurement Sheet)')) return;
+    try {
+      await supaDelete(`abstract_items?id=eq.${id}`);
+      loadAbstract();
+    } catch (e) {
+      alert('Delete failed: ' + e.message);
+    }
+  }
+
+  async function generateAbstract() {
+    if (!currentProjectId) { showStatus('genStatus', 'error', 'Not connected yet.'); return; }
+    try {
+      showStatus('genStatus', 'success', 'Working…');
+
+      const measurements = await supaGet(`measurement_items?select=*&project_id=eq.${currentProjectId}`);
+      if (!measurements || measurements.length === 0) {
+        showStatus('genStatus', 'error', 'No measurements to consolidate. Add some in the Measure page first.');
+        return;
+      }
+
+      // Group by category + description + unit
+      const groups = {};
+      measurements.forEach(m => {
+        const key = `${m.nrm2_category || ''}|${m.description}|${m.unit}`;
+        if (!groups[key]) {
+          groups[key] = {
+            nrm2_category: m.nrm2_category || null,
+            description: m.description,
+            unit: m.unit,
+            total_quantity: 0,
+            measurement_ids: []
+          };
+        }
+        groups[key].total_quantity += Number(m.quantity);
+        groups[key].measurement_ids.push(m.id);
+      });
+
+      // Clear previous abstract for this project (cascades to abstract_item_links automatically)
+      await supaDelete(`abstract_items?project_id=eq.${currentProjectId}`);
+
+      // Create new abstract_items and their links
+      for (const key in groups) {
+        const g = groups[key];
+        const created = await supaPost('abstract_items', {
+          project_id: currentProjectId,
+          description: g.description,
+          nrm2_category: g.nrm2_category,
+          unit: g.unit,
+          total_quantity: g.total_quantity
+        }, true);
+        const abstractItemId = created[0].id;
+
+        const links = g.measurement_ids.map(mid => ({
+          abstract_item_id: abstractItemId,
+          measurement_item_id: mid
+        }));
+        await supaPost('abstract_item_links', links, false);
+      }
+
+      showStatus('genStatus', 'success', `Abstract generated: ${Object.keys(groups).length} line(s) from ${measurements.length} measurement(s).`);
+      loadAbstract();
+    } catch (e) {
+      showStatus('genStatus', 'error', 'Error: ' + e.message);
+    }
+  }
+
+  async function init() {
+    await ensureProject();
+    await loadAbstract();
+  }
+
+  init();
+</script>
+
+</body>
+</html>
