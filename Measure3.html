@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Measure</title>
+<title>Neo QS - Measure</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: -apple-system, sans-serif; background: #0d1117; color: #e6edf3; margin: 0; padding: 16px; }
@@ -33,7 +33,7 @@
 </head>
 <body>
 
-<h1>Measure</h1>
+<h1>Neo QS — Measure</h1>
 <div class="subtitle">Measurement Sheet · manual entry + PlanSwift CSV import</div>
 <div class="banner error" id="errorBanner"></div>
 
@@ -73,6 +73,7 @@
 
 <div class="card">
   <h2>Measurement Sheet</h2>
+  <button onclick="clearAllMeasurements(this)" style="background:#5c1414;margin-bottom:12px;">Clear All Measurements</button>
   <div class="table-scroll">
     <table>
       <thead><tr><th>Description</th><th>Unit</th><th>Qty</th><th>Source</th><th></th></tr></thead>
@@ -149,6 +150,26 @@
       }
     });
     if (!res.ok) throw new Error(await res.text());
+  }
+
+  let clearMeasureArmed = false;
+
+  async function clearAllMeasurements(btn) {
+    if (!currentProjectId) return;
+    if (!clearMeasureArmed) {
+      clearMeasureArmed = true;
+      btn.textContent = 'Tap again to confirm delete';
+      setTimeout(() => { clearMeasureArmed = false; btn.textContent = 'Clear All Measurements'; }, 4000);
+      return;
+    }
+    clearMeasureArmed = false;
+    btn.textContent = 'Clear All Measurements';
+    try {
+      await supaDelete(`measurement_items?project_id=eq.${currentProjectId}`);
+      loadMeasurementItems();
+    } catch (e) {
+      alert('Clear failed: ' + e.message);
+    }
   }
 
   async function deleteItem(id) {
