@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neo QS - BOQ</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, sans-serif; background: #0d1117; color: #e6edf3; margin: 0; padding: 16px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .subtitle { color: #8b949e; font-size: 13px; margin-bottom: 20px; }
+  .banner { padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display: none; }
+  .banner.error { background: #2d0d0d; border: 1px solid #ff4d4d; color: #ffb3b3; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .card h2 { font-size: 15px; margin: 0 0 12px 0; color: #58a6ff; }
+  .card p.hint { color: #8b949e; font-size: 12px; margin: 0 0 12px 0; }
+  button { width: 100%; padding: 12px; background: #238636; color: white; border: none; border-radius: 6px; font-size: 15px; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #21262d; vertical-align: top; }
+  th { color: #8b949e; font-weight: 500; font-size: 11px; text-transform: uppercase; }
+  .qty { color: #7ee787; font-weight: 600; white-space: nowrap; }
+  .code-tag { font-size: 11px; padding: 2px 6px; border-radius: 6px; background: #1f3a5f; color: #79c0ff; font-family: monospace; }
+  .empty-state { text-align: center; color: #6e7681; padding: 20px; font-size: 13px; }
+  .status { font-size: 12px; margin-top: 8px; padding: 8px; border-radius: 6px; display: none; }
+  .status.success { background: #0d2818; color: #7ee787; display: block; }
+  .status.error { background: #2d0d0d; color: #ff7b72; display: block; }
+  .table-scroll { overflow-x: auto; }
+  .delete-btn { width: auto; padding: 4px 10px; margin: 0; background: #5c1414; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<h1>Neo QS — BOQ</h1>
+<div class="subtitle">Bill of Quantities generated from your Abstract</div>
+<div class="banner error" id="errorBanner"></div>
+
+<div class="card">
+  <h2>Manual Entry</h2>
+  <p class="hint">Add a standalone BOQ line directly, separate from what's auto-generated from Abstract.</p>
+  <label style="display:block;font-size:12px;color:#8b949e;margin-bottom:4px;margin-top:10px;">Item Code</label>
+  <input type="text" id="manualCode" placeholder="e.g. 1.3" style="width:100%;padding:10px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-size:15px;margin-bottom:4px;">
+  <label style="display:block;font-size:12px;color:#8b949e;margin-bottom:4px;margin-top:10px;">Description</label>
+  <input type="text" id="manualDescription" placeholder="e.g. Supply and fix damp proof membrane" style="width:100%;padding:10px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-size:15px;margin-bottom:4px;">
+  <label style="display:block;font-size:12px;color:#8b949e;margin-bottom:4px;margin-top:10px;">Unit</label>
+  <input type="text" id="manualUnit" placeholder="e.g. m2" style="width:100%;padding:10px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-size:15px;margin-bottom:4px;">
+  <label style="display:block;font-size:12px;color:#8b949e;margin-bottom:4px;margin-top:10px;">Quantity</label>
+  <input type="number" step="any" id="manualQuantity" placeholder="e.g. 120" style="width:100%;padding:10px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-size:15px;margin-bottom:4px;">
+  <button onclick="addManualBOQItem()">Add BOQ Line</button>
+  <div class="status" id="manualStatus"></div>
+</div>
+
+<div class="card">
+  <h2>Import BOQ from CSV</h2>
+  <p class="hint">Export your existing BOQ from Excel as .csv (File → Save As → CSV), with columns: item_code, description, unit, quantity.</p>
+  <input type="file" id="csvFile" accept=".csv" style="width:100%;padding:8px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;margin-top:10px;">
+  <button class="secondary" onclick="importBOQCSV()" style="background:#21262d;border:1px solid #30363d;">Import CSV</button>
+  <div class="status" id="importStatus"></div>
+</div>
+
+<div class="card">
+  <h2>Generate BOQ</h2>
+  <p class="hint">This creates one BOQ line per Abstract item, with an NRM2-style item code and full spec-language description. Running it again replaces the current BOQ with a fresh one from the latest Abstract.</p>
+  <button onclick="generateBOQ()">Generate BOQ from Abstract</button>
+  <div class="status" id="genStatus"></div>
+</div>
+
+<div class="card">
+  <h2>Bill of Quantities</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Code</th><th>Description</th><th>Unit</th><th>Qty</th><th></th></tr></thead>
+      <tbody id="boqBody"><tr><td colspan="5" class="empty-state">Fetching your BOQ…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL = "https://krnhvacnsluescndjobp.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_qJsuE50avRGjP44LddactA_C86KRBC_";
+  let currentProjectId = null;
+
+  function showError(msg) {
+    const b = document.getElementById('errorBanner');
+    b.style.display = 'block';
+    b.textContent = '⚠️ ' + msg;
+  }
+
+  function showStatus(elId, type, msg) {
+    const el = document.getElementById(elId);
+    el.className = 'status ' + type;
+    el.textContent = msg;
+    setTimeout(() => { el.style.display = 'none'; }, 5000);
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  async function supaGet(path) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
+  async function supaPost(path, body, preferReturn) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': preferReturn ? 'return=representation' : 'return=minimal'
+      },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return preferReturn ? res.json() : null;
+  }
+
+  async function supaDelete(path) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+    });
+    if (!res.ok) throw new Error(await res.text());
+  }
+
+  async function ensureProject() {
+    try {
+      const existing = await supaGet('projects?select=id&limit=1');
+      if (existing && existing.length > 0) {
+        currentProjectId = existing[0].id;
+      } else {
+        showError('No project found. Add measurements first.');
+      }
+    } catch (e) {
+      showError('Could not connect to Supabase: ' + e.message);
+    }
+  }
+
+  async function loadBOQ() {
+    if (!currentProjectId) return;
+    const tbody = document.getElementById('boqBody');
+    try {
+      const data = await supaGet(`boq_items?select=*&project_id=eq.${currentProjectId}&order=item_code.asc`);
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No BOQ yet — generate one above from your Abstract.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(item => `
+        <tr>
+          <td><span class="code-tag">${escapeHtml(item.item_code || '')}</span></td>
+          <td>${escapeHtml(item.description)}</td>
+          <td>${escapeHtml(item.unit)}</td>
+          <td class="qty">${Number(item.quantity).toFixed(2)}</td>
+          <td><button class="delete-btn" onclick="deleteBOQItem('${item.id}')">✕</button></td>
+        </tr>`).join('');
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Error: ${e.message}</td></tr>`;
+    }
+  }
+
+  async function deleteBOQItem(id) {
+    if (!confirm('Delete this BOQ line?')) return;
+    try {
+      await supaDelete(`boq_items?id=eq.${id}`);
+      loadBOQ();
+    } catch (e) {
+      alert('Delete failed: ' + e.message);
+    }
+  }
+
+  // Builds a fuller, standards-style description from the abstract line.
+  // This is a starting template - real NRM2/SMM7 wording conventions can be
+  // refined further once we compare against real BOQ examples.
+  function buildFullDescription(item) {
+    const cat = item.nrm2_category ? item.nrm2_category + ': ' : '';
+    return `${cat}${item.description}, as measured, all in accordance with NRM2 measurement rules.`;
+  }
+
+  function parseCSV(text) {
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    return lines.slice(1).map(line => {
+      const vals = line.split(',');
+      const row = {};
+      headers.forEach((h, idx) => row[h] = (vals[idx] || '').trim());
+      return row;
+    });
+  }
+
+  async function importBOQCSV() {
+    if (!currentProjectId) { showStatus('importStatus', 'error', 'Not connected yet.'); return; }
+    const fileInput = document.getElementById('csvFile');
+    if (!fileInput.files.length) { showStatus('importStatus', 'error', 'Choose a CSV file first.'); return; }
+    const text = await fileInput.files[0].text();
+    const rows = parseCSV(text);
+    if (rows.length === 0) { showStatus('importStatus', 'error', 'No rows found.'); return; }
+
+    const items = rows.map(r => ({
+      project_id: currentProjectId,
+      abstract_item_id: null,
+      item_code: r.item_code || r.code || null,
+      description: r.description || 'Imported item',
+      unit: r.unit || 'item',
+      quantity: parseFloat(r.quantity || r.qty || 0)
+    })).filter(i => i.quantity > 0 && i.description !== 'Imported item');
+
+    if (items.length === 0) {
+      showStatus('importStatus', 'error', 'No valid rows found. Check your column names match: item_code, description, unit, quantity.');
+      return;
+    }
+
+    try {
+      await supaPost('boq_items', items, false);
+      showStatus('importStatus', 'success', `Imported ${items.length} item(s).`);
+      fileInput.value = '';
+      loadBOQ();
+    } catch (e) {
+      showStatus('importStatus', 'error', 'Import error: ' + e.message);
+    }
+  }
+
+  async function addManualBOQItem() {
+    if (!currentProjectId) { showStatus('manualStatus', 'error', 'Not connected yet.'); return; }
+    const item_code = document.getElementById('manualCode').value.trim();
+    const description = document.getElementById('manualDescription').value.trim();
+    const unit = document.getElementById('manualUnit').value.trim();
+    const quantity = document.getElementById('manualQuantity').value;
+
+    if (!description) { showStatus('manualStatus', 'error', 'Description is required.'); return; }
+    if (!unit) { showStatus('manualStatus', 'error', 'Unit is required.'); return; }
+    if (!quantity || isNaN(parseFloat(quantity))) { showStatus('manualStatus', 'error', 'Enter a valid quantity.'); return; }
+
+    try {
+      await supaPost('boq_items', {
+        project_id: currentProjectId,
+        abstract_item_id: null,
+        item_code: item_code || null,
+        description,
+        unit,
+        quantity: parseFloat(quantity)
+      }, false);
+
+      showStatus('manualStatus', 'success', 'BOQ line added.');
+      ['manualCode','manualDescription','manualUnit','manualQuantity'].forEach(id => document.getElementById(id).value = '');
+      loadBOQ();
+    } catch (e) {
+      showStatus('manualStatus', 'error', 'Error: ' + e.message);
+    }
+  }
+
+  async function generateBOQ() {
+    if (!currentProjectId) { showStatus('genStatus', 'error', 'Not connected yet.'); return; }
+    try {
+      showStatus('genStatus', 'success', 'Working…');
+
+      const abstractItems = await supaGet(`abstract_items?select=*&project_id=eq.${currentProjectId}&order=nrm2_category.asc,description.asc`);
+      if (!abstractItems || abstractItems.length === 0) {
+        showStatus('genStatus', 'error', 'No Abstract found. Generate an Abstract first.');
+        return;
+      }
+
+      // Clear previous BOQ for this project
+      await supaDelete(`boq_items?project_id=eq.${currentProjectId}`);
+
+      // Assign sequential codes grouped by category
+      let categoryCounters = {};
+      let categoryIndex = {};
+      let nextCategoryNum = 1;
+
+      const newItems = abstractItems.map(item => {
+        const cat = item.nrm2_category || 'General';
+        if (!(cat in categoryIndex)) {
+          categoryIndex[cat] = nextCategoryNum++;
+          categoryCounters[cat] = 0;
+        }
+        categoryCounters[cat] += 1;
+        const item_code = `${categoryIndex[cat]}.${categoryCounters[cat]}`;
+
+        return {
+          project_id: currentProjectId,
+          abstract_item_id: item.id,
+          item_code,
+          description: buildFullDescription(item),
+          unit: item.unit,
+          quantity: item.total_quantity
+        };
+      });
+
+      await supaPost('boq_items', newItems, false);
+
+      showStatus('genStatus', 'success', `BOQ generated: ${newItems.length} line(s).`);
+      loadBOQ();
+    } catch (e) {
+      showStatus('genStatus', 'error', 'Error: ' + e.message);
+    }
+  }
+
+  async function init() {
+    await ensureProject();
+    await loadBOQ();
+  }
+
+  init();
+</script>
+
+</body>
+</html>
