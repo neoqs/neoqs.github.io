@@ -75,7 +75,7 @@
   <h2>Measurement Sheet</h2>
   <div class="table-scroll">
     <table>
-      <thead><tr><th>Description</th><th>Unit</th><th>Qty</th><th>Source</th></tr></thead>
+      <thead><tr><th>Description</th><th>Unit</th><th>Qty</th><th>Source</th><th></th></tr></thead>
       <tbody id="sheetBody"><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
     </table>
   </div>
@@ -140,7 +140,26 @@
     return preferReturn ? res.json() : null;
   }
 
-  async function ensureProject() {
+  async function supaDelete(path) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY
+      }
+    });
+    if (!res.ok) throw new Error(await res.text());
+  }
+
+  async function deleteItem(id) {
+    if (!confirm('Delete this item?')) return;
+    try {
+      await supaDelete(`measurement_items?id=eq.${id}`);
+      loadMeasurementItems();
+    } catch (e) {
+      alert('Delete failed: ' + e.message);
+    }
+  }
     try {
       const existing = await supaGet('projects?select=id&limit=1');
       if (existing && existing.length > 0) {
@@ -160,7 +179,7 @@
     try {
       const data = await supaGet(`measurement_items?select=*&project_id=eq.${currentProjectId}&order=created_at.desc`);
       if (!data || data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No items yet — add one above.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No items yet — add one above.</td></tr>';
         return;
       }
       tbody.innerHTML = data.map(item => `
@@ -169,9 +188,10 @@
           <td>${escapeHtml(item.unit)}</td>
           <td class="qty">${Number(item.quantity).toFixed(2)}</td>
           <td><span class="source-tag ${item.source === 'planswift_import' ? 'import' : ''}">${item.source === 'planswift_import' ? 'PlanSwift' : 'Manual'}</span></td>
+          <td><button class="delete-btn" onclick="deleteItem('${item.id}')" style="width:auto;padding:4px 10px;margin:0;background:#5c1414;font-size:12px;">✕</button></td>
         </tr>`).join('');
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Error: ${e.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Error: ${e.message}</td></tr>`;
     }
   }
 
