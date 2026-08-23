@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Abstract</title>
+<title>Neo QS - Abstract</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: -apple-system, sans-serif; background: #0d1117; color: #e6edf3; margin: 0; padding: 16px; }
@@ -30,7 +30,7 @@
 </head>
 <body>
 
-<h1>Abstract</h1>
+<h1>Neo QS — Abstract</h1>
 <div class="subtitle">Consolidated from your Measurement Sheet, grouped by NRM2 category</div>
 <div class="banner error" id="errorBanner"></div>
 
@@ -43,6 +43,7 @@
 
 <div class="card">
   <h2>Abstract</h2>
+  <button onclick="clearAllAbstract(this)" style="background:#5c1414;margin-bottom:12px;">Clear All Abstract Items</button>
   <div class="table-scroll">
     <table>
       <thead><tr><th>Description</th><th>Category</th><th>Unit</th><th>Total Qty</th><th></th></tr></thead>
@@ -137,6 +138,26 @@
         </tr>`).join('');
     } catch (e) {
       tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Error: ${e.message}</td></tr>`;
+    }
+  }
+
+  let clearAbstractArmed = false;
+
+  async function clearAllAbstract(btn) {
+    if (!currentProjectId) return;
+    if (!clearAbstractArmed) {
+      clearAbstractArmed = true;
+      btn.textContent = 'Tap again to confirm delete';
+      setTimeout(() => { clearAbstractArmed = false; btn.textContent = 'Clear All Abstract Items'; }, 4000);
+      return;
+    }
+    clearAbstractArmed = false;
+    btn.textContent = 'Clear All Abstract Items';
+    try {
+      await supaDelete(`abstract_items?project_id=eq.${currentProjectId}`);
+      loadAbstract();
+    } catch (e) {
+      alert('Clear failed: ' + e.message);
     }
   }
 
