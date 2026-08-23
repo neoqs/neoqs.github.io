@@ -76,7 +76,7 @@
   <div class="table-scroll">
     <table>
       <thead><tr><th>Description</th><th>Unit</th><th>Qty</th><th>Source</th><th></th></tr></thead>
-      <tbody id="sheetBody"><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
+      <tbody id="sheetBody"><tr><td colspan="5" class="empty-state">Fetching your measurements…</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -160,6 +160,8 @@
       alert('Delete failed: ' + e.message);
     }
   }
+
+  async function ensureProject() {
     try {
       const existing = await supaGet('projects?select=id&limit=1');
       if (existing && existing.length > 0) {
