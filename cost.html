@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neo QS - Cost</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, sans-serif; background: #0d1117; color: #e6edf3; margin: 0; padding: 16px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .subtitle { color: #8b949e; font-size: 13px; margin-bottom: 20px; }
+  .banner { padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display: none; }
+  .banner.error { background: #2d0d0d; border: 1px solid #ff4d4d; color: #ffb3b3; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .card h2 { font-size: 15px; margin: 0 0 12px 0; color: #58a6ff; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #21262d; vertical-align: top; }
+  th { color: #8b949e; font-weight: 500; font-size: 11px; text-transform: uppercase; }
+  .qty { color: #7ee787; font-weight: 600; white-space: nowrap; }
+  .amount { color: #79c0ff; font-weight: 700; white-space: nowrap; }
+  .empty-state { text-align: center; color: #6e7681; padding: 20px; font-size: 13px; }
+  .table-scroll { overflow-x: auto; }
+  .rate-input {
+    width: 90px; padding: 6px; background: #0d1117; border: 1px solid #30363d;
+    border-radius: 6px; color: #e6edf3; font-size: 13px;
+  }
+  .save-btn {
+    padding: 6px 10px; background: #238636; color: white; border: none;
+    border-radius: 6px; font-size: 12px; margin-left: 4px;
+  }
+  .total-card {
+    background: #0d2818; border: 1px solid #2ea043; border-radius: 10px;
+    padding: 20px; text-align: center; margin-bottom: 16px;
+  }
+  .total-card .label { color: #7ee787; font-size: 13px; margin-bottom: 4px; }
+  .total-card .value { color: #7ee787; font-size: 28px; font-weight: 700; }
+  .status { font-size: 11px; margin-top: 4px; }
+  .status.success { color: #7ee787; }
+  .status.error { color: #ff7b72; }
+</style>
+</head>
+<body>
+
+<h1>Neo QS — Cost</h1>
+<div class="subtitle">Enter unit rates per BOQ item to build total project cost</div>
+<div class="banner error" id="errorBanner"></div>
+
+<div class="total-card">
+  <div class="label">TOTAL PROJECT COST</div>
+  <div class="value" id="totalCost">—</div>
+</div>
+
+<div class="card">
+  <h2>Priced Items</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Description</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
+      <tbody id="costBody"><tr><td colspan="5" class="empty-state">Fetching your BOQ…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL = "https://krnhvacnsluescndjobp.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_qJsuE50avRGjP44LddactA_C86KRBC_";
+  let currentProjectId = null;
+
+  function showError(msg) {
+    const b = document.getElementById('errorBanner');
+    b.style.display = 'block';
+    b.textContent = '⚠️ ' + msg;
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function formatMoney(n) {
+    return Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  async function supaGet(path) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
+  async function supaPost(path, body, preferReturn) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': preferReturn ? 'return=representation' : 'return=minimal'
+      },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return preferReturn ? res.json() : null;
+  }
+
+  async function supaPatch(path, body) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(await res.text());
+  }
+
+  async function ensureProject() {
+    try {
+      const existing = await supaGet('projects?select=id&limit=1');
+      if (existing && existing.length > 0) {
+        currentProjectId = existing[0].id;
+      } else {
+        showError('No project found. Add measurements first.');
+      }
+    } catch (e) {
+      showError('Could not connect to Supabase: ' + e.message);
+    }
+  }
+
+  async function saveRate(boqItemId, inputEl, statusEl) {
+    const rateVal = inputEl.value;
+    if (rateVal === '' || isNaN(parseFloat(rateVal))) {
+      statusEl.textContent = 'Enter a valid rate';
+      statusEl.className = 'status error';
+      return;
+    }
+    const rate = parseFloat(rateVal);
+    try {
+      // Check if a cost_item already exists for this boq item
+      const existing = await supaGet(`cost_items?select=id&boq_item_id=eq.${boqItemId}&limit=1`);
+      if (existing && existing.length > 0) {
+        await supaPatch(`cost_items?id=eq.${existing[0].id}`, { unit_rate: rate });
+      } else {
+        await supaPost('cost_items', {
+          project_id: currentProjectId,
+          boq_item_id: boqItemId,
+          unit_rate: rate
+        }, false);
+      }
+      statusEl.textContent = 'Saved';
+      statusEl.className = 'status success';
+      loadCostData();
+    } catch (e) {
+      statusEl.textContent = 'Error: ' + e.message;
+      statusEl.className = 'status error';
+    }
+  }
+
+  async function loadCostData() {
+    if (!currentProjectId) return;
+    const tbody = document.getElementById('costBody');
+    try {
+      const boqItems = await supaGet(`boq_items?select=*&project_id=eq.${currentProjectId}&order=item_code.asc`);
+      if (!boqItems || boqItems.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No BOQ found. Generate or import a BOQ first.</td></tr>';
+        document.getElementById('totalCost').textContent = '—';
+        return;
+      }
+
+      const costItems = await supaGet(`cost_items?select=*&project_id=eq.${currentProjectId}`);
+      const rateMap = {};
+      costItems.forEach(c => { rateMap[c.boq_item_id] = c.unit_rate; });
+
+      let total = 0;
+      tbody.innerHTML = boqItems.map(item => {
+        const rate = rateMap[item.id];
+        const amount = rate ? (Number(item.quantity) * Number(rate)) : null;
+        if (amount !== null) total += amount;
+
+        return `
+        <tr>
+          <td>${escapeHtml(item.description)}</td>
+          <td>${escapeHtml(item.unit)}</td>
+          <td class="qty">${Number(item.quantity).toFixed(2)}</td>
+          <td>
+            <input type="number" step="any" class="rate-input" id="rate-${item.id}" value="${rate || ''}" placeholder="0.00">
+            <button class="save-btn" onclick="saveRate('${item.id}', document.getElementById('rate-${item.id}'), document.getElementById('status-${item.id}'))">Save</button>
+            <div class="status" id="status-${item.id}"></div>
+          </td>
+          <td class="amount">${amount !== null ? formatMoney(amount) : '—'}</td>
+        </tr>`;
+      }).join('');
+
+      document.getElementById('totalCost').textContent = '₦' + formatMoney(total);
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Error: ${e.message}</td></tr>`;
+    }
+  }
+
+  async function init() {
+    await ensureProject();
+    await loadCostData();
+  }
+
+  init();
+</script>
+
+</body>
+</html>
