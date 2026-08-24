@@ -516,6 +516,7 @@
 
   async function deleteAbstractItem(id) {
     try {
+      await supaPatch(`boq_items?abstract_item_id=eq.${id}`, { abstract_item_id: null });
       await supaDelete(`abstract_items?id=eq.${id}`);
       loadAbstract();
     } catch (e) {
@@ -535,6 +536,9 @@
     clearAbstractArmed = false;
     btn.textContent = 'Clear All Abstract Items';
     try {
+      // BOQ items may reference abstract_items - detach that link first
+      // so we don't delete your BOQ data, just its connection to Abstract.
+      await supaPatch(`boq_items?project_id=eq.${currentProjectId}`, { abstract_item_id: null });
       await supaDelete(`abstract_items?project_id=eq.${currentProjectId}`);
       loadAbstract();
     } catch (e) {
@@ -560,6 +564,8 @@
         groups[key].total_quantity += Number(m.quantity);
         groups[key].measurement_ids.push(m.id);
       });
+      // Detach any BOQ items linked to the old abstract lines before replacing them
+      await supaPatch(`boq_items?project_id=eq.${currentProjectId}`, { abstract_item_id: null });
       await supaDelete(`abstract_items?project_id=eq.${currentProjectId}`);
       for (const key in groups) {
         const g = groups[key];
