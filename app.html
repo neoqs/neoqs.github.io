@@ -221,6 +221,7 @@
 
     <div class="card">
       <h3>Bill of Quantities</h3>
+      <button class="btn" style="background:#8957e5;margin-bottom:12px;" onclick="exportBOQAsPDF()">Export BOQ as PDF</button>
       <div class="table-scroll">
         <table>
           <thead><tr><th>Code</th><th>Description</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Amount</th><th></th></tr></thead>
@@ -588,6 +589,77 @@
   function buildFullDescription(item) {
     const cat = item.nrm2_category ? item.nrm2_category + ': ' : '';
     return `${cat}${item.description}, as measured, all in accordance with NRM2 measurement rules.`;
+  }
+
+  async function exportBOQAsPDF() {
+    if (!currentProjectId) { alert('Not connected yet.'); return; }
+    try {
+      const boqItems = await supaGet(`boq_items?select=*&project_id=eq.${currentProjectId}&order=item_code.asc`);
+      if (!boqItems || boqItems.length === 0) {
+        alert('No BOQ items to export. Generate or add a BOQ first.');
+        return;
+      }
+      let costItems = [];
+      try { costItems = await supaGet(`cost_items?select=*&project_id=eq.${currentProjectId}`); } catch(e) {}
+      const rateMap = {};
+      costItems.forEach(c => { rateMap[c.boq_item_id] = c.unit_rate; });
+
+      let grandTotal = 0;
+      const rowsHtml = boqItems.map(item => {
+        const rate = rateMap[item.id];
+        const amount = rate ? Number(item.quantity) * Number(rate) : null;
+        if (amount !== null) grandTotal += amount;
+        return `
+          <tr>
+            <td>${escapeHtml(item.item_code || '')}</td>
+            <td>${escapeHtml(item.description)}</td>
+            <td>${escapeHtml(item.unit)}</td>
+            <td style="text-align:right;">${Number(item.quantity).toFixed(2)}</td>
+            <td style="text-align:right;">${rate ? formatMoney(rate) : ''}</td>
+            <td style="text-align:right;">${amount !== null ? formatMoney(amount) : ''}</td>
+          </tr>`;
+      }).join('');
+
+      const dateStr = new Date().toLocaleDateString();
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Bill of Quantities</title>
+          <style>
+            body { font-family: -apple-system, Helvetica, Arial, sans-serif; padding: 24px; color: #111; }
+            h1 { font-size: 20px; margin-bottom: 2px; }
+            .meta { color: #555; font-size: 12px; margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+            th { background: #f0f0f0; }
+            tfoot td { font-weight: bold; background: #f7f7f7; }
+          </style>
+        </head>
+        <body>
+          <h1>Neo QS — Bill of Quantities</h1>
+          <div class="meta">Generated ${dateStr}</div>
+          <table>
+            <thead>
+              <tr><th>Code</th><th>Description</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+            <tfoot>
+              <tr><td colspan="5" style="text-align:right;">TOTAL PROJECT COST</td><td style="text-align:right;">${formatMoney(grandTotal)}</td></tr>
+            </tfoot>
+          </table>
+          <script>
+            window.onload = function() { window.print(); };
+          </script>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (e) {
+      alert('Export failed: ' + e.message);
+    }
   }
 
   async function loadBOQ() {
