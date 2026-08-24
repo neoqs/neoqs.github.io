@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neo QS</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, sans-serif; background: #0d1117; color: #e6edf3; margin: 0; padding: 0; }
+  .topbar {
+    display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+    background: #161b22; border-bottom: 1px solid #30363d; position: sticky; top: 0; z-index: 20;
+  }
+  .hamburger { font-size: 22px; background: none; border: none; color: #e6edf3; padding: 4px 8px; cursor: pointer; width: auto; margin: 0; }
+  .topbar h1 { font-size: 16px; margin: 0; }
+  .topbar h1 .neo { color: #e6edf3; } .topbar h1 .qs { color: #3fb950; }
+
+  .overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 30;
+  }
+  .overlay.open { display: block; }
+
+  .drawer {
+    position: fixed; top: 0; left: -260px; width: 240px; height: 100%;
+    background: #10151c; border-right: 1px solid #30363d; z-index: 40;
+    transition: left 0.2s ease; padding: 20px 0; overflow-y: auto;
+  }
+  .drawer.open { left: 0; }
+  .drawer .brand { padding: 0 20px 20px 20px; font-size: 18px; font-weight: 700; }
+  .drawer .brand .neo { color: #e6edf3; } .drawer .brand .qs { color: #3fb950; }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px; padding: 12px 20px;
+    color: #c9d1d9; text-decoration: none; font-size: 15px; cursor: pointer;
+  }
+  .nav-item .icon { font-size: 17px; width: 20px; text-align: center; }
+  .nav-item.active { background: #238636; color: white; border-radius: 0; }
+  .nav-item:not(.active):active { background: #1c2128; }
+  .drawer-footer {
+    margin-top: 20px; padding: 14px 20px; border-top: 1px solid #30363d;
+    display: flex; align-items: center; gap: 10px; font-size: 13px; color: #8b949e;
+  }
+  .avatar {
+    width: 32px; height: 32px; border-radius: 50%; background: #30363d;
+    display: flex; align-items: center; justify-content: center; font-size: 14px; color: #c9d1d9;
+  }
+
+  .content { padding: 16px; padding-bottom: 60px; }
+  .section { display: none; }
+  .section.active { display: block; }
+
+  h2.page-title { font-size: 20px; margin-bottom: 4px; }
+  .subtitle { color: #8b949e; font-size: 13px; margin-bottom: 20px; }
+  .banner { padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display: none; }
+  .banner.error { background: #2d0d0d; border: 1px solid #ff4d4d; color: #ffb3b3; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .card h3 { font-size: 15px; margin: 0 0 12px 0; color: #3fb950; }
+  .card p.hint { color: #8b949e; font-size: 12px; margin: 0 0 12px 0; line-height: 1.5; }
+  label { display: block; font-size: 12px; color: #8b949e; margin-bottom: 4px; margin-top: 10px; }
+  input, select { width: 100%; padding: 10px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 15px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  button.btn { width: 100%; padding: 12px; margin-top: 16px; background: #238636; color: white; border: none; border-radius: 6px; font-size: 15px; font-weight: 600; }
+  button.btn.secondary { background: #21262d; border: 1px solid #30363d; }
+  button.btn.danger { background: #5c1414; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #21262d; vertical-align: top; }
+  th { color: #8b949e; font-weight: 500; font-size: 11px; text-transform: uppercase; }
+  .qty { color: #7ee787; font-weight: 600; white-space: nowrap; }
+  .amount { color: #79c0ff; font-weight: 700; white-space: nowrap; }
+  .tag { font-size: 10px; padding: 2px 6px; border-radius: 10px; background: #30363d; color: #8b949e; }
+  .tag.import { background: #1f3a5f; color: #79c0ff; }
+  .code-tag { font-size: 11px; padding: 2px 6px; border-radius: 6px; background: #1f3a5f; color: #79c0ff; font-family: monospace; }
+  .empty-state { text-align: center; color: #6e7681; padding: 20px; font-size: 13px; }
+  .status { font-size: 12px; margin-top: 8px; padding: 8px; border-radius: 6px; display: none; }
+  .status.success { background: #0d2818; color: #7ee787; display: block; }
+  .status.error { background: #2d0d0d; color: #ff7b72; display: block; }
+  .table-scroll { overflow-x: auto; }
+  .delete-btn { width: auto; padding: 4px 10px; margin: 0; background: #5c1414; font-size: 12px; }
+  .rate-input { width: 90px; padding: 6px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 13px; }
+  .save-btn { padding: 6px 10px; background: #238636; color: white; border: none; border-radius: 6px; font-size: 12px; margin-left: 4px; }
+  .total-card { background: #0d2818; border: 1px solid #2ea043; border-radius: 10px; padding: 20px; text-align: center; margin-bottom: 16px; }
+  .total-card .label { color: #7ee787; font-size: 13px; margin-bottom: 4px; }
+  .total-card .value { color: #7ee787; font-size: 28px; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <button class="hamburger" onclick="toggleDrawer()">☰</button>
+  <h1><span class="neo">Neo</span> <span class="qs">QS</span></h1>
+</div>
+
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+
+<div class="drawer" id="drawer">
+  <div class="brand"><span class="neo">NEO</span> <span class="qs">QS</span></div>
+  <div class="nav-item active" data-section="measure" onclick="showSection('measure')"><span class="icon">📏</span> Measurement</div>
+  <div class="nav-item" data-section="abstract" onclick="showSection('abstract')"><span class="icon">📋</span> Abstract</div>
+  <div class="nav-item" data-section="boq" onclick="showSection('boq')"><span class="icon">📄</span> BOQ</div>
+  <div class="nav-item" data-section="cost" onclick="showSection('cost')"><span class="icon">💰</span> Cost</div>
+  <div class="nav-item" data-section="settings" onclick="showSection('settings')"><span class="icon">⚙️</span> Settings</div>
+  <div class="drawer-footer">
+    <div class="avatar">👤</div>
+    <div>Quantity Surveyor</div>
+  </div>
+</div>
+
+<div class="content">
+  <div class="banner error" id="globalError"></div>
+
+  <!-- ============ MEASURE ============ -->
+  <div class="section active" id="section-measure">
+    <h2 class="page-title">Measure</h2>
+    <div class="subtitle">Measurement Sheet · manual entry + PlanSwift CSV import</div>
+
+    <div class="card">
+      <h3>Manual Entry</h3>
+      <label>Description</label>
+      <input type="text" id="m_description" placeholder="e.g. Excavate foundation trench">
+      <label>NRM2 Category</label>
+      <input type="text" id="m_category" placeholder="e.g. Groundworks">
+      <div class="row3">
+        <div><label>Length (m)</label><input type="number" step="any" id="m_length"></div>
+        <div><label>Width (m)</label><input type="number" step="any" id="m_width"></div>
+        <div><label>Height (m)</label><input type="number" step="any" id="m_height"></div>
+      </div>
+      <label>Unit</label>
+      <select id="m_unit">
+        <option value="m3">m³ (cubic metres)</option>
+        <option value="m2">m² (square metres)</option>
+        <option value="m">m (linear metres)</option>
+        <option value="nr">nr (number/count)</option>
+        <option value="kg">kg</option>
+        <option value="item">item</option>
+      </select>
+      <label>Quantity (auto-calculated if dimensions given, or enter manually)</label>
+      <input type="number" step="any" id="m_quantity" placeholder="Leave blank to auto-calculate">
+      <button class="btn" onclick="addMeasurementItem()">Add to Measurement Sheet</button>
+      <div class="status" id="m_manualStatus"></div>
+    </div>
+
+    <div class="card">
+      <h3>PlanSwift CSV Import</h3>
+      <label>Upload PlanSwift export (.csv)</label>
+      <input type="file" id="m_csvFile" accept=".csv" style="margin-top:10px;">
+      <button class="btn secondary" onclick="importMeasureCSV()">Import to Measurement Sheet</button>
+      <div class="status" id="m_importStatus"></div>
+    </div>
+
+    <div class="card">
+      <h3>Measurement Sheet</h3>
+      <button class="btn danger" onclick="clearAllMeasurements(this)">Clear All Measurements</button>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Description</th><th>Unit</th><th>Qty</th><th>Source</th><th></th></tr></thead>
+          <tbody id="m_sheetBody"><tr><td colspan="5" class="empty-state">Fetching…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ ABSTRACT ============ -->
+  <div class="section" id="section-abstract">
+    <h2 class="page-title">Abstract</h2>
+    <div class="subtitle">Consolidated from your Measurement Sheet, grouped by NRM2 category</div>
+
+    <div class="card">
+      <h3>Generate Abstract</h3>
+      <p class="hint">Regroups all current Measurement Sheet items by category, description, and unit, summing quantities. Running again replaces the current Abstract with a fresh one.</p>
+      <button class="btn" onclick="generateAbstract()">Consolidate Measurements into Abstract</button>
+      <div class="status" id="ab_genStatus"></div>
+    </div>
+
+    <div class="card">
+      <h3>Abstract</h3>
+      <button class="btn danger" onclick="clearAllAbstract(this)">Clear All Abstract Items</button>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Description</th><th>Category</th><th>Unit</th><th>Total Qty</th><th></th></tr></thead>
+          <tbody id="ab_body"><tr><td colspan="5" class="empty-state">Fetching…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ BOQ ============ -->
+  <div class="section" id="section-boq">
+    <h2 class="page-title">BOQ</h2>
+    <div class="subtitle">Bill of Quantities generated from your Abstract</div>
+
+    <div class="card">
+      <h3>Manual Entry</h3>
+      <p class="hint">Add a standalone BOQ line directly, separate from what's auto-generated from Abstract.</p>
+      <label>Item Code</label>
+      <input type="text" id="boq_manualCode" placeholder="e.g. 1.3">
+      <label>Description</label>
+      <input type="text" id="boq_manualDescription" placeholder="e.g. Supply and fix damp proof membrane">
+      <label>Unit</label>
+      <input type="text" id="boq_manualUnit" placeholder="e.g. m2">
+      <label>Quantity</label>
+      <input type="number" step="any" id="boq_manualQuantity" placeholder="e.g. 120">
+      <button class="btn" onclick="addManualBOQItem()">Add BOQ Line</button>
+      <div class="status" id="boq_manualStatus"></div>
+    </div>
+
+    <div class="card">
+      <h3>Import BOQ from CSV</h3>
+      <p class="hint">Export your existing BOQ from Excel as .csv (File → Save As → CSV), with columns: item_code, description, unit, quantity.</p>
+      <input type="file" id="boq_csvFile" accept=".csv" style="margin-top:10px;">
+      <button class="btn secondary" onclick="importBOQCSV()">Import CSV</button>
+      <div class="status" id="boq_importStatus"></div>
+    </div>
+
+    <div class="card">
+      <h3>Generate BOQ</h3>
+      <p class="hint">Creates one BOQ line per Abstract item, with an NRM2-style item code and full spec-language description. Running again replaces the current BOQ.</p>
+      <button class="btn" onclick="generateBOQ()">Generate BOQ from Abstract</button>
+      <div class="status" id="boq_genStatus"></div>
+      <button class="btn danger" onclick="clearAllBOQ(this)">Clear All BOQ Items</button>
+      <div class="status" id="boq_clearStatus"></div>
+    </div>
+
+    <div class="card">
+      <h3>Bill of Quantities</h3>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Code</th><th>Description</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Amount</th><th></th></tr></thead>
+          <tbody id="boq_body"><tr><td colspan="7" class="empty-state">Fetching…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ COST ============ -->
+  <div class="section" id="section-cost">
+    <h2 class="page-title">Cost</h2>
+    <div class="subtitle">Enter unit rates per BOQ item to build total project cost</div>
+
+    <div class="total-card">
+      <div class="label">TOTAL PROJECT COST</div>
+      <div class="value" id="cost_total">—</div>
+    </div>
+
+    <div class="card">
+      <h3>Priced Items</h3>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Description</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
+          <tbody id="cost_body"><tr><td colspan="5" class="empty-state">Fetching…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SETTINGS ============ -->
+  <div class="section" id="section-settings">
+    <h2 class="page-title">Settings</h2>
+    <div class="subtitle">Account and app settings</div>
+    <div class="card">
+      <p class="hint">Sign in, account management, and app preferences are coming soon. For now, all data is stored under a single default project.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ===================== SHARED CORE =====================
+  const SUPABASE_URL = "https://krnhvacnsluescndjobp.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_qJsuE50avRGjP44LddactA_C86KRBC_";
+  let currentProjectId = null;
+
+  function toggleDrawer() {
+    document.getElementById('drawer').classList.toggle('open');
+    document.getElementById('overlay').classList.toggle('open');
+  }
+  function closeDrawer() {
+    document.getElementById('drawer').classList.remove('open');
+    document.getElementById('overlay').classList.remove('open');
+  }
+
+  function showSection(name) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById('section-' + name).classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelector('.nav-item[data-section="' + name + '"]').classList.add('active');
+    closeDrawer();
+  }
+
+  function showGlobalError(msg) {
+    const b = document.getElementById('globalError');
+    b.style.display = 'block';
+    b.textContent = '⚠️ ' + msg;
+  }
+
+  function showStatus(elId, type, msg) {
+    const el = document.getElementById(elId);
+    el.className = 'status ' + type;
+    el.textContent = msg;
+    setTimeout(() => { el.style.display = 'none'; }, 5000);
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function formatMoney(n) {
+    return Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  async function supaGet(path) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
+  async function supaPost(path, body, preferReturn) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': preferReturn ? 'return=representation' : 'return=minimal'
+      },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return preferReturn ? res.json() : null;
+  }
+
+  async function supaPatch(path, body) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(await res.text());
+  }
+
+  async function supaDelete(path) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+    });
+    if (!res.ok) throw new Error(await res.text());
+  }
+
+  function parseCSV(text) {
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    return lines.slice(1).map(line => {
+      const vals = line.split(',');
+      const row = {};
+      headers.forEach((h, idx) => row[h] = (vals[idx] || '').trim());
+      return row;
+    });
+  }
+
+  async function ensureProject() {
+    try {
+      const existing = await supaGet('projects?select=id&limit=1');
+      if (existing && existing.length > 0) {
+        currentProjectId = existing[0].id;
+      } else {
+        const created = await supaPost('projects', { name: 'My First Project' }, true);
+        currentProjectId = created[0].id;
+      }
+    } catch (e) {
+      showGlobalError('Could not connect to Supabase: ' + e.message);
+    }
+  }
+
+  // ===================== MEASURE =====================
+  function calcQuantity(unit, length, width, height) {
+    const l = parseFloat(length), w = parseFloat(width), h = parseFloat(height);
+    if (unit === 'm3' && l && w && h) return l * w * h;
+    if (unit === 'm2' && l && w) return l * w;
+    if (unit === 'm' && l) return l;
+    return null;
+  }
+
+  async function loadMeasurementItems() {
+    if (!currentProjectId) return;
+    const tbody = document.getElementById('m_sheetBody');
+    try {
+      const data = await supaGet(`measurement_items?select=*&project_id=eq.${currentProjectId}&order=created_at.desc`);
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No items yet — add one above.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(item => `
+        <tr>
+          <td>${escapeHtml(item.description)}</td>
+          <td>${escapeHtml(item.unit)}</td>
+          <td class="qty">${Number(item.quantity).toFixed(2)}</td>
+          <td><span class="tag ${item.source === 'planswift_import' ? 'import' : ''}">${item.source === 'planswift_import' ? 'PlanSwift' : 'Manual'}</span></td>
+          <td><button class="delete-btn" onclick="deleteMeasurementItem('${item.id}')">✕</button></td>
+        </tr>`).join('');
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Error: ${e.message}</td></tr>`;
+    }
+  }
+
+  async function deleteMeasurementItem(id) {
+    try {
+      await supaDelete(`measurement_items?id=eq.${id}`);
+      loadMeasurementItems();
+    } catch (e) {
+      alert('Delete failed: ' + e.message);
+    }
+  }
+
+  let clearMeasureArmed = false;
+  async function clearAllMeasurements(btn) {
+    if (!currentProjectId) return;
+    if (!clearMeasureArmed) {
+      clearMeasureArmed = true;
+      btn.textContent = 'Tap again to confirm delete';
+      setTimeout(() => { clearMeasureArmed = false; btn.textContent = 'Clear All Measurements'; }, 4000);
+      return;
+    }
+    clearMeasureArmed = false;
+    btn.textContent = 'Clear All Measurements';
+    try {
+      await supaDelete(`measurement_items?project_id=eq.${currentProjectId}`);
+      loadMeasurementItems();
+    } catch (e) {
+      alert('Clear failed: ' + e.message);
+    }
+  }
+
+  async function addMeasurementItem() {
+    if (!currentProjectId) { showStatus('m_manualStatus', 'error', 'Not connected yet.'); return; }
+    const description = document.getElementById('m_description').value.trim();
+    const nrm2_category = document.getElementById('m_category').value.trim();
+    const length = document.getElementById('m_length').value;
+    const width = document.getElementById('m_width').value;
+    const height = document.getElementById('m_height').value;
+    const unit = document.getElementById('m_unit').value;
+    let quantity = document.getElementById('m_quantity').value;
+    if (!description) { showStatus('m_manualStatus', 'error', 'Description is required.'); return; }
+    if (!quantity) {
+      const calc = calcQuantity(unit, length, width, height);
+      if (calc !== null) { quantity = calc; }
+      else { showStatus('m_manualStatus', 'error', 'Enter a quantity or dimensions.'); return; }
+    }
+    try {
+      await supaPost('measurement_items', {
+        project_id: currentProjectId, description, nrm2_category: nrm2_category || null,
+        unit, length: length || null, width: width || null, height: height || null,
+        quantity: parseFloat(quantity), source: 'manual'
+      }, false);
+      showStatus('m_manualStatus', 'success', 'Added to Measurement Sheet.');
+      ['m_description','m_category','m_length','m_width','m_height','m_quantity'].forEach(id => document.getElementById(id).value = '');
+      loadMeasurementItems();
+    } catch (e) {
+      showStatus('m_manualStatus', 'error', 'Error: ' + e.message);
+    }
+  }
+
+  async function importMeasureCSV() {
+    if (!currentProjectId) { showStatus('m_importStatus', 'error', 'Not connected yet.'); return; }
+    const fileInput = document.getElementById('m_csvFile');
+    if (!fileInput.files.length) { showStatus('m_importStatus', 'error', 'Choose a CSV file first.'); return; }
+    const text = await fileInput.files[0].text();
+    const rows = parseCSV(text);
+    if (rows.length === 0) { showStatus('m_importStatus', 'error', 'No rows found.'); return; }
+    const items = rows.map(r => ({
+      project_id: currentProjectId,
+      description: r.description || r.item || 'Imported item',
+      nrm2_category: r.category || r.nrm2_category || null,
+      unit: r.unit || 'item',
+      quantity: parseFloat(r.quantity || r.qty || 0),
+      source: 'planswift_import'
+    })).filter(i => i.quantity > 0);
+    if (items.length === 0) { showStatus('m_importStatus', 'error', 'No valid quantity data found.'); return; }
+    try {
+      await supaPost('measurement_items', items, false);
+      showStatus('m_importStatus', 'success', `Imported ${items.length} item(s).`);
+      fileInput.value = '';
+      loadMeasurementItems();
+    } catch (e) {
+      showStatus('m_importStatus', 'error', 'Import error: ' + e.message);
+    }
+  }
+
+  // ===================== ABSTRACT =====================
+  async function loadAbstract() {
+    if (!currentProjectId) return;
+    const tbody = document.getElementById('ab_body');
+    try {
+      const data = await supaGet(`abstract_items?select=*&project_id=eq.${currentProjectId}&order=nrm2_category.asc,description.asc`);
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No abstract yet — generate one above.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(item => `
+        <tr>
+          <td>${escapeHtml(item.description)}</td>
+          <td>${item.nrm2_category ? `<span class="tag">${escapeHtml(item.nrm2_category)}</span>` : '—'}</td>
+          <td>${escapeHtml(item.unit)}</td>
+          <td class="qty">${Number(item.total_quantity).toFixed(2)}</td>
+          <td><button class="delete-btn" onclick="deleteAbstractItem('${item.id}')">✕</button></td>
+        </tr>`).join('');
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Error: ${e.message}</td></tr>`;
+    }
+  }
+
+  async function deleteAbstractItem(id) {
+    try {
+      await supaDelete(`abstract_items?id=eq.${id}`);
+      loadAbstract();
+    } catch (e) {
+      alert('Delete failed: ' + e.message);
+    }
+  }
+
+  let clearAbstractArmed = false;
+  async function clearAllAbstract(btn) {
+    if (!currentProjectId) return;
+    if (!clearAbstractArmed) {
+      clearAbstractArmed = true;
+      btn.textContent = 'Tap again to confirm delete';
+      setTimeout(() => { clearAbstractArmed = false; btn.textContent = 'Clear All Abstract Items'; }, 4000);
+      return;
+    }
+    clearAbstractArmed = false;
+    btn.textContent = 'Clear All Abstract Items';
+    try {
+      await supaDelete(`abstract_items?project_id=eq.${currentProjectId}`);
+      loadAbstract();
+    } catch (e) {
+      alert('Clear failed: ' + e.message);
+    }
+  }
+
+  async function generateAbstract() {
+    if (!currentProjectId) { showStatus('ab_genStatus', 'error', 'Not connected yet.'); return; }
+    try {
+      showStatus('ab_genStatus', 'success', 'Working…');
+      const measurements = await supaGet(`measurement_items?select=*&project_id=eq.${currentProjectId}`);
+      if (!measurements || measurements.length === 0) {
+        showStatus('ab_genStatus', 'error', 'No measurements to consolidate.');
+        return;
+      }
+      const groups = {};
+      measurements.forEach(m => {
+        const key = `${m.nrm2_category || ''}|${m.description}|${m.unit}`;
+        if (!groups[key]) {
+          groups[key] = { nrm2_category: m.nrm2_category || null, description: m.description, unit: m.unit, total_quantity: 0, measurement_ids: [] };
+        }
+        groups[key].total_quantity += Number(m.quantity);
+        groups[key].measurement_ids.push(m.id);
+      });
+      await supaDelete(`abstract_items?project_id=eq.${currentProjectId}`);
+      for (const key in groups) {
+        const g = groups[key];
+        const created = await supaPost('abstract_items', {
+          project_id: currentProjectId, description: g.description, nrm2_category: g.nrm2_category,
+          unit: g.unit, total_quantity: g.total_quantity
+        }, true);
+        const abstractItemId = created[0].id;
+        const links = g.measurement_ids.map(mid => ({ abstract_item_id: abstractItemId, measurement_item_id: mid }));
+        await supaPost('abstract_item_links', links, false);
+      }
+      showStatus('ab_genStatus', 'success', `Abstract generated: ${Object.keys(groups).length} line(s).`);
+      loadAbstract();
+    } catch (e) {
+      showStatus('ab_genStatus', 'error', 'Error: ' + e.message);
+    }
+  }
+
+  // ===================== BOQ =====================
+  function buildFullDescription(item) {
+    const cat = item.nrm2_category ? item.nrm2_category + ': ' : '';
+    return `${cat}${item.description}, as measured, all in accordance with NRM2 measurement rules.`;
+  }
+
+  async function loadBOQ() {
+    if (!currentProjectId) return;
+    const tbody = document.getElementById('boq_body');
+    try {
+      const data = await supaGet(`boq_items?select=*&project_id=eq.${currentProjectId}&order=item_code.asc`);
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No BOQ yet — generate, add, or import one above.</td></tr>';
+        return;
+      }
+      let costItems = [];
+      try { costItems = await supaGet(`cost_items?select=*&project_id=eq.${currentProjectId}`); } catch (e) {}
+      const rateMap = {};
+      costItems.forEach(c => { rateMap[c.boq_item_id] = c.unit_rate; });
+
+      let grandTotal = 0;
+      tbody.innerHTML = data.map(item => {
+        const rate = rateMap[item.id];
+        const amount = rate ? Number(item.quantity) * Number(rate) : null;
+        if (amount !== null) grandTotal += amount;
+        return `
+        <tr>
+          <td><span class="code-tag">${escapeHtml(item.item_code || '')}</span></td>
+          <td>${escapeHtml(item.description)}</td>
+          <td>${escapeHtml(item.unit)}</td>
+          <td class="qty">${Number(item.quantity).toFixed(2)}</td>
+          <td>${rate ? formatMoney(rate) : '—'}</td>
+          <td class="qty">${amount !== null ? formatMoney(amount) : '—'}</td>
+          <td><button class="delete-btn" onclick="deleteBOQItem('${item.id}')">✕</button></td>
+        </tr>`;
+      }).join('') + `
+        <tr style="font-weight:700;">
+          <td colspan="5" style="text-align:right;color:#8b949e;">TOTAL PROJECT COST</td>
+          <td class="qty">${formatMoney(grandTotal)}</td>
+          <td></td>
+        </tr>`;
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Error: ${e.message}</td></tr>`;
+    }
+  }
+
+  async function deleteBOQItem(id) {
+    try {
+      await supaDelete(`boq_items?id=eq.${id}`);
+      loadBOQ();
+    } catch (e) {
+      alert('Delete failed: ' + e.message);
+    }
+  }
+
+  let clearBOQArmed = false;
+  async function clearAllBOQ(btn) {
+    if (!currentProjectId) return;
+    if (!clearBOQArmed) {
+      clearBOQArmed = true;
+      btn.textContent = 'Tap again to confirm delete';
+      setTimeout(() => { clearBOQArmed = false; btn.textContent = 'Clear All BOQ Items'; }, 4000);
+      return;
+    }
+    clearBOQArmed = false;
+    btn.textContent = 'Clear All BOQ Items';
+    try {
+      await supaDelete(`boq_items?project_id=eq.${currentProjectId}`);
+      showStatus('boq_clearStatus', 'success', 'All BOQ items cleared.');
+      loadBOQ();
+    } catch (e) {
+      showStatus('boq_clearStatus', 'error', 'Error: ' + e.message);
+    }
+  }
+
+  async function addManualBOQItem() {
+    if (!currentProjectId) { showStatus('boq_manualStatus', 'error', 'Not connected yet.'); return; }
+    const item_code = document.getElementById('boq_manualCode').value.trim();
+    const description = document.getElementById('boq_manualDescription').value.trim();
+    const unit = document.getElementById('boq_manualUnit').value.trim();
+    const quantity = document.getElementById('boq_manualQuantity').value;
+    if (!description) { showStatus('boq_manualStatus', 'error', 'Description is required.'); return; }
+    if (!unit) { showStatus('boq_manualStatus', 'error', 'Unit is required.'); return; }
+    if (!quantity || isNaN(parseFloat(quantity))) { showStatus('boq_manualStatus', 'error', 'Enter a valid quantity.'); return; }
+    try {
+      await supaPost('boq_items', {
+        project_id: currentProjectId, abstract_item_id: null,
+        item_code: item_code || null, description, unit, quantity: parseFloat(quantity)
+      }, false);
+      showStatus('boq_manualStatus', 'success', 'BOQ line added.');
+      ['boq_manualCode','boq_manualDescription','boq_manualUnit','boq_manualQuantity'].forEach(id => document.getElementById(id).value = '');
+      loadBOQ();
+    } catch (e) {
+      showStatus('boq_manualStatus', 'error', 'Error: ' + e.message);
+    }
+  }
+
+  async function importBOQCSV() {
+    if (!currentProjectId) { showStatus('boq_importStatus', 'error', 'Not connected yet.'); return; }
+    const fileInput = document.getElementById('boq_csvFile');
+    if (!fileInput.files.length) { showStatus('boq_importStatus', 'error', 'Choose a CSV file first.'); return; }
+    const text = await fileInput.files[0].text();
+    const rows = parseCSV(text);
+    if (rows.length === 0) { showStatus('boq_importStatus', 'error', 'No rows found.'); return; }
+    const items = rows.map(r => ({
+      project_id: currentProjectId, abstract_item_id: null,
+      item_code: r.item_code || r.code || null,
+      description: r.description || 'Imported item',
+      unit: r.unit || 'item',
+      quantity: parseFloat(r.quantity || r.qty || 0)
+    })).filter(i => i.quantity > 0 && i.description !== 'Imported item');
+    if (items.length === 0) { showStatus('boq_importStatus', 'error', 'No valid rows found.'); return; }
+    try {
+      await supaPost('boq_items', items, false);
+      showStatus('boq_importStatus', 'success', `Imported ${items.length} item(s).`);
+      fileInput.value = '';
+      loadBOQ();
+    } catch (e) {
+      showStatus('boq_importStatus', 'error', 'Import error: ' + e.message);
+    }
+  }
+
+  async function generateBOQ() {
+    if (!currentProjectId) { showStatus('boq_genStatus', 'error', 'Not connected yet.'); return; }
+    try {
+      showStatus('boq_genStatus', 'success', 'Working…');
+      const abstractItems = await supaGet(`abstract_items?select=*&project_id=eq.${currentProjectId}&order=nrm2_category.asc,description.asc`);
+      if (!abstractItems || abstractItems.length === 0) {
+        showStatus('boq_genStatus', 'error', 'No Abstract found. Generate an Abstract first.');
+        return;
+      }
+      await supaDelete(`boq_items?project_id=eq.${currentProjectId}`);
+      let categoryIndex = {}, categoryCounters = {}, nextCategoryNum = 1;
+      const newItems = abstractItems.map(item => {
+        const cat = item.nrm2_category || 'General';
+        if (!(cat in categoryIndex)) { categoryIndex[cat] = nextCategoryNum++; categoryCounters[cat] = 0; }
+        categoryCounters[cat] += 1;
+        const item_code = `${categoryIndex[cat]}.${categoryCounters[cat]}`;
+        return {
+          project_id: currentProjectId, abstract_item_id: item.id, item_code,
+          description: buildFullDescription(item), unit: item.unit, quantity: item.total_quantity
+        };
+      });
+      await supaPost('boq_items', newItems, false);
+      showStatus('boq_genStatus', 'success', `BOQ generated: ${newItems.length} line(s).`);
+      loadBOQ();
+    } catch (e) {
+      showStatus('boq_genStatus', 'error', 'Error: ' + e.message);
+    }
+  }
+
+  // ===================== COST =====================
+  async function saveRate(boqItemId, inputEl, statusEl) {
+    const rateVal = inputEl.value;
+    if (rateVal === '' || isNaN(parseFloat(rateVal))) {
+      statusEl.textContent = 'Enter a valid rate';
+      statusEl.className = 'status error';
+      statusEl.style.display = 'block';
+      return;
+    }
+    const rate = parseFloat(rateVal);
+    try {
+      const existing = await supaGet(`cost_items?select=id&boq_item_id=eq.${boqItemId}&limit=1`);
+      if (existing && existing.length > 0) {
+        await supaPatch(`cost_items?id=eq.${existing[0].id}`, { unit_rate: rate });
+      } else {
+        await supaPost('cost_items', { project_id: currentProjectId, boq_item_id: boqItemId, unit_rate: rate }, false);
+      }
+      statusEl.textContent = 'Saved';
+      statusEl.className = 'status success';
+      statusEl.style.display = 'block';
+      loadCostData();
+      loadBOQ();
+    } catch (e) {
+      statusEl.textContent = 'Error: ' + e.message;
+      statusEl.className = 'status error';
+      statusEl.style.display = 'block';
+    }
+  }
+
+  async function loadCostData() {
+    if (!currentProjectId) return;
+    const tbody = document.getElementById('cost_body');
+    try {
+      const boqItems = await supaGet(`boq_items?select=*&project_id=eq.${currentProjectId}&order=item_code.asc`);
+      if (!boqItems || boqItems.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No BOQ found. Generate or import a BOQ first.</td></tr>';
+        document.getElementById('cost_total').textContent = '—';
+        return;
+      }
+      const costItems = await supaGet(`cost_items?select=*&project_id=eq.${currentProjectId}`);
+      const rateMap = {};
+      costItems.forEach(c => { rateMap[c.boq_item_id] = c.unit_rate; });
+
+      let total = 0;
+      tbody.innerHTML = boqItems.map(item => {
+        const rate = rateMap[item.id];
+        const amount = rate ? (Number(item.quantity) * Number(rate)) : null;
+        if (amount !== null) total += amount;
+        return `
+        <tr>
+          <td>${escapeHtml(item.description)}</td>
+          <td>${escapeHtml(item.unit)}</td>
+          <td class="qty">${Number(item.quantity).toFixed(2)}</td>
+          <td>
+            <input type="number" step="any" class="rate-input" id="rate-${item.id}" value="${rate || ''}" placeholder="0.00">
+            <button class="save-btn" onclick="saveRate('${item.id}', document.getElementById('rate-${item.id}'), document.getElementById('status-${item.id}'))">Save</button>
+            <div class="status" id="status-${item.id}"></div>
+          </td>
+          <td class="amount">${amount !== null ? formatMoney(amount) : '—'}</td>
+        </tr>`;
+      }).join('');
+      document.getElementById('cost_total').textContent = '₦' + formatMoney(total);
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Error: ${e.message}</td></tr>`;
+    }
+  }
+
+  // ===================== INIT =====================
+  async function init() {
+    await ensureProject();
+    await loadMeasurementItems();
+    await loadAbstract();
+    await loadBOQ();
+    await loadCostData();
+  }
+
+  init();
+</script>
+
+</body>
+</html>
