@@ -650,13 +650,11 @@
               <tr><td colspan="5" style="text-align:right;">TOTAL PROJECT COST</td><td style="text-align:right;">${formatMoney(grandTotal)}</td></tr>
             </tfoot>
           </table>
-          <script>
-            window.onload = function() { window.print(); };
-          </script>
         </body>
         </html>
       `);
       printWindow.document.close();
+      setTimeout(() => { printWindow.print(); }, 300);
     } catch (e) {
       alert('Export failed: ' + e.message);
     }
