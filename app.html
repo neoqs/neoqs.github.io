@@ -593,9 +593,17 @@
 
   async function exportBOQAsPDF() {
     if (!currentProjectId) { alert('Not connected yet.'); return; }
+    // Must open the window synchronously, before any await, or Safari blocks it
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Could not open export window. Please allow pop-ups for this site in Safari settings and try again.');
+      return;
+    }
+    printWindow.document.write('<p style="font-family:sans-serif;padding:20px;">Preparing your BOQ export…</p>');
     try {
       const boqItems = await supaGet(`boq_items?select=*&project_id=eq.${currentProjectId}&order=item_code.asc`);
       if (!boqItems || boqItems.length === 0) {
+        printWindow.close();
         alert('No BOQ items to export. Generate or add a BOQ first.');
         return;
       }
@@ -621,7 +629,7 @@
       }).join('');
 
       const dateStr = new Date().toLocaleDateString();
-      const printWindow = window.open('', '_blank');
+      printWindow.document.open();
       printWindow.document.write(`
         <!DOCTYPE html>
         <html>
@@ -656,6 +664,7 @@
       printWindow.document.close();
       setTimeout(() => { printWindow.print(); }, 300);
     } catch (e) {
+      printWindow.close();
       alert('Export failed: ' + e.message);
     }
   }
