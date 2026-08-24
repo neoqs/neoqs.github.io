@@ -114,6 +114,10 @@
 
     <div class="card">
       <h3>Manual Entry</h3>
+      <label>Section (e.g. Main Building)</label>
+      <input type="text" id="m_section" placeholder="e.g. Main Building">
+      <label>Subsection (e.g. Excavation and Earthworks)</label>
+      <input type="text" id="m_subsection" placeholder="e.g. Excavation and Earthworks">
       <label>Description</label>
       <input type="text" id="m_description" placeholder="e.g. Excavate foundation trench">
       <label>NRM2 Category</label>
@@ -175,7 +179,7 @@
       <button class="btn danger" onclick="clearAllAbstract(this)">Clear All Abstract Items</button>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>Description</th><th>Category</th><th>Unit</th><th>Total Qty</th><th></th></tr></thead>
+          <thead><tr><th>Section</th><th>Description</th><th>Category</th><th>Unit</th><th>Total Qty</th><th></th></tr></thead>
           <tbody id="ab_body"><tr><td colspan="5" class="empty-state">Fetching…</td></tr></tbody>
         </table>
       </div>
@@ -188,23 +192,35 @@
     <div class="subtitle">Bill of Quantities generated from your Abstract</div>
 
     <div class="card">
+      <h3>Project Title</h3>
+      <p class="hint">Appears at the top of your BOQ and PDF export.</p>
+      <input type="text" id="boq_projectTitle" placeholder="e.g. Bill of Quantities for Proposed Construction of...">
+      <button class="btn" onclick="saveProjectTitle()">Save Title</button>
+      <div class="status" id="boq_titleStatus"></div>
+    </div>
+
+    <div class="card">
       <h3>Manual Entry</h3>
-      <p class="hint">Add a standalone BOQ line directly, separate from what's auto-generated from Abstract.</p>
-      <label>Item Code</label>
-      <input type="text" id="boq_manualCode" placeholder="e.g. 1.3">
+      <p class="hint">Add a standalone BOQ line directly — e.g. a Preliminaries item. Leave Item Letter blank to auto-assign the next letter within its section/subsection.</p>
+      <label>Section (e.g. Preliminaries, Main Building)</label>
+      <input type="text" id="boq_manualSection" placeholder="e.g. Preliminaries">
+      <label>Subsection (optional)</label>
+      <input type="text" id="boq_manualSubsection" placeholder="e.g. Excavation and Earthworks">
+      <label>Item Letter (optional)</label>
+      <input type="text" id="boq_manualCode" placeholder="e.g. A">
       <label>Description</label>
-      <input type="text" id="boq_manualDescription" placeholder="e.g. Supply and fix damp proof membrane">
+      <input type="text" id="boq_manualDescription" placeholder="e.g. Allow for water for the works">
       <label>Unit</label>
-      <input type="text" id="boq_manualUnit" placeholder="e.g. m2">
+      <input type="text" id="boq_manualUnit" placeholder="e.g. sum">
       <label>Quantity</label>
-      <input type="number" step="any" id="boq_manualQuantity" placeholder="e.g. 120">
+      <input type="number" step="any" id="boq_manualQuantity" placeholder="e.g. 1">
       <button class="btn" onclick="addManualBOQItem()">Add BOQ Line</button>
       <div class="status" id="boq_manualStatus"></div>
     </div>
 
     <div class="card">
       <h3>Import BOQ from CSV</h3>
-      <p class="hint">Export your existing BOQ from Excel as .csv (File → Save As → CSV), with columns: item_code, description, unit, quantity.</p>
+      <p class="hint">Export your existing BOQ from Excel as .csv (File → Save As → CSV), with columns: section, subsection, item_code, description, unit, quantity.</p>
       <input type="file" id="boq_csvFile" accept=".csv" style="margin-top:10px;">
       <button class="btn secondary" onclick="importBOQCSV()">Import CSV</button>
       <div class="status" id="boq_importStatus"></div>
@@ -212,7 +228,7 @@
 
     <div class="card">
       <h3>Generate BOQ</h3>
-      <p class="hint">Creates one BOQ line per Abstract item, with an NRM2-style item code and full spec-language description. Running again replaces the current BOQ.</p>
+      <p class="hint">Creates one BOQ line per Abstract item, grouped by Section/Subsection with letters resetting per subsection. Running again replaces the current auto-generated BOQ (manual lines are kept).</p>
       <button class="btn" onclick="generateBOQ()">Generate BOQ from Abstract</button>
       <div class="status" id="boq_genStatus"></div>
       <button class="btn danger" onclick="clearAllBOQ(this)">Clear All BOQ Items</button>
@@ -222,12 +238,7 @@
     <div class="card">
       <h3>Bill of Quantities</h3>
       <button class="btn" style="background:#8957e5;margin-bottom:12px;" onclick="exportBOQAsPDF()">Export BOQ as PDF</button>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>Code</th><th>Description</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Amount</th><th></th></tr></thead>
-          <tbody id="boq_body"><tr><td colspan="7" class="empty-state">Fetching…</td></tr></tbody>
-        </table>
-      </div>
+      <div id="boq_hierarchy"><div class="empty-state">Fetching…</div></div>
     </div>
   </div>
 
@@ -439,6 +450,8 @@
 
   async function addMeasurementItem() {
     if (!currentProjectId) { showStatus('m_manualStatus', 'error', 'Not connected yet.'); return; }
+    const section = document.getElementById('m_section').value.trim();
+    const subsection = document.getElementById('m_subsection').value.trim();
     const description = document.getElementById('m_description').value.trim();
     const nrm2_category = document.getElementById('m_category').value.trim();
     const length = document.getElementById('m_length').value;
@@ -455,11 +468,12 @@
     try {
       await supaPost('measurement_items', {
         project_id: currentProjectId, description, nrm2_category: nrm2_category || null,
+        section: section || null, subsection: subsection || null,
         unit, length: length || null, width: width || null, height: height || null,
         quantity: parseFloat(quantity), source: 'manual'
       }, false);
       showStatus('m_manualStatus', 'success', 'Added to Measurement Sheet.');
-      ['m_description','m_category','m_length','m_width','m_height','m_quantity'].forEach(id => document.getElementById(id).value = '');
+      ['m_section','m_subsection','m_description','m_category','m_length','m_width','m_height','m_quantity'].forEach(id => document.getElementById(id).value = '');
       loadMeasurementItems();
     } catch (e) {
       showStatus('m_manualStatus', 'error', 'Error: ' + e.message);
@@ -475,6 +489,8 @@
     if (rows.length === 0) { showStatus('m_importStatus', 'error', 'No rows found.'); return; }
     const items = rows.map(r => ({
       project_id: currentProjectId,
+      section: r.section || null,
+      subsection: r.subsection || null,
       description: r.description || r.item || 'Imported item',
       nrm2_category: r.category || r.nrm2_category || null,
       unit: r.unit || 'item',
@@ -497,13 +513,14 @@
     if (!currentProjectId) return;
     const tbody = document.getElementById('ab_body');
     try {
-      const data = await supaGet(`abstract_items?select=*&project_id=eq.${currentProjectId}&order=nrm2_category.asc,description.asc`);
+      const data = await supaGet(`abstract_items?select=*&project_id=eq.${currentProjectId}&order=section.asc,subsection.asc,description.asc`);
       if (!data || data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No abstract yet — generate one above.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No abstract yet — generate one above.</td></tr>';
         return;
       }
       tbody.innerHTML = data.map(item => `
         <tr>
+          <td>${item.section ? escapeHtml(item.section) : '—'}${item.subsection ? ' / ' + escapeHtml(item.subsection) : ''}</td>
           <td>${escapeHtml(item.description)}</td>
           <td>${item.nrm2_category ? `<span class="tag">${escapeHtml(item.nrm2_category)}</span>` : '—'}</td>
           <td>${escapeHtml(item.unit)}</td>
@@ -511,7 +528,7 @@
           <td><button class="delete-btn" onclick="deleteAbstractItem('${item.id}')">✕</button></td>
         </tr>`).join('');
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Error: ${e.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Error: ${e.message}</td></tr>`;
     }
   }
 
@@ -558,9 +575,13 @@
       }
       const groups = {};
       measurements.forEach(m => {
-        const key = `${m.nrm2_category || ''}|${m.description}|${m.unit}`;
+        const key = `${m.section || ''}|${m.subsection || ''}|${m.nrm2_category || ''}|${m.description}|${m.unit}`;
         if (!groups[key]) {
-          groups[key] = { nrm2_category: m.nrm2_category || null, description: m.description, unit: m.unit, total_quantity: 0, measurement_ids: [] };
+          groups[key] = {
+            section: m.section || null, subsection: m.subsection || null,
+            nrm2_category: m.nrm2_category || null, description: m.description, unit: m.unit,
+            total_quantity: 0, measurement_ids: []
+          };
         }
         groups[key].total_quantity += Number(m.quantity);
         groups[key].measurement_ids.push(m.id);
@@ -572,6 +593,7 @@
         const g = groups[key];
         const created = await supaPost('abstract_items', {
           project_id: currentProjectId, description: g.description, nrm2_category: g.nrm2_category,
+          section: g.section, subsection: g.subsection,
           unit: g.unit, total_quantity: g.total_quantity
         }, true);
         const abstractItemId = created[0].id;
@@ -587,8 +609,56 @@
 
   // ===================== BOQ =====================
   function buildFullDescription(item) {
-    const cat = item.nrm2_category ? item.nrm2_category + ': ' : '';
-    return `${cat}${item.description}, as measured, all in accordance with NRM2 measurement rules.`;
+    return `${item.description}, as measured, all in accordance with NRM2 measurement rules.`;
+  }
+
+  // Groups a flat list of boq_items into { sectionName: { subsectionName: [items] } }
+  // Items with no section/subsection fall under "General" so nothing is silently lost.
+  function groupBOQHierarchy(data) {
+    const tree = {};
+    const order = []; // preserves first-seen order of sections
+    const subOrder = {}; // preserves first-seen order of subsections per section
+
+    data.forEach(item => {
+      const sec = item.section || 'General';
+      const sub = item.subsection || '';
+      if (!tree[sec]) { tree[sec] = {}; order.push(sec); subOrder[sec] = []; }
+      if (!tree[sec][sub]) { tree[sec][sub] = []; subOrder[sec].push(sub); }
+      tree[sec][sub].push(item);
+    });
+
+    return { tree, order, subOrder };
+  }
+
+  function computeSubtotal(items, rateMap) {
+    let total = 0;
+    let anyPriced = false;
+    items.forEach(item => {
+      const rate = rateMap[item.id];
+      if (rate) { anyPriced = true; total += Number(item.quantity) * Number(rate); }
+    });
+    return anyPriced ? total : null;
+  }
+
+  async function saveProjectTitle() {
+    if (!currentProjectId) { showStatus('boq_titleStatus', 'error', 'Not connected yet.'); return; }
+    const title = document.getElementById('boq_projectTitle').value.trim();
+    try {
+      await supaPatch(`projects?id=eq.${currentProjectId}`, { title: title || null });
+      showStatus('boq_titleStatus', 'success', 'Title saved.');
+    } catch (e) {
+      showStatus('boq_titleStatus', 'error', 'Error: ' + e.message);
+    }
+  }
+
+  async function loadProjectTitle() {
+    if (!currentProjectId) return;
+    try {
+      const rows = await supaGet(`projects?select=title&id=eq.${currentProjectId}&limit=1`);
+      if (rows && rows.length > 0 && rows[0].title) {
+        document.getElementById('boq_projectTitle').value = rows[0].title;
+      }
+    } catch (e) { /* non-critical */ }
   }
 
   async function exportBOQAsPDF() {
@@ -601,7 +671,7 @@
     }
     printWindow.document.write('<p style="font-family:sans-serif;padding:20px;">Preparing your BOQ export…</p>');
     try {
-      const boqItems = await supaGet(`boq_items?select=*&project_id=eq.${currentProjectId}&order=item_code.asc`);
+      const boqItems = await supaGet(`boq_items?select=*&project_id=eq.${currentProjectId}&order=section.asc,subsection.asc,item_code.asc`);
       if (!boqItems || boqItems.length === 0) {
         printWindow.close();
         alert('No BOQ items to export. Generate or add a BOQ first.');
@@ -612,21 +682,41 @@
       const rateMap = {};
       costItems.forEach(c => { rateMap[c.boq_item_id] = c.unit_rate; });
 
+      let titleText = 'Bill of Quantities';
+      try {
+        const rows = await supaGet(`projects?select=title&id=eq.${currentProjectId}&limit=1`);
+        if (rows && rows.length > 0 && rows[0].title) titleText = rows[0].title;
+      } catch (e) {}
+
+      const { tree, order, subOrder } = groupBOQHierarchy(boqItems);
+
       let grandTotal = 0;
-      const rowsHtml = boqItems.map(item => {
-        const rate = rateMap[item.id];
-        const amount = rate ? Number(item.quantity) * Number(rate) : null;
-        if (amount !== null) grandTotal += amount;
-        return `
-          <tr>
-            <td>${escapeHtml(item.item_code || '')}</td>
-            <td>${escapeHtml(item.description)}</td>
-            <td>${escapeHtml(item.unit)}</td>
-            <td style="text-align:right;">${Number(item.quantity).toFixed(2)}</td>
-            <td style="text-align:right;">${rate ? formatMoney(rate) : ''}</td>
-            <td style="text-align:right;">${amount !== null ? formatMoney(amount) : ''}</td>
-          </tr>`;
-      }).join('');
+      let bodyHtml = '';
+      order.forEach(sec => {
+        bodyHtml += `<tr><td colspan="6" style="background:#e0e0e0;font-weight:700;">${escapeHtml(sec)}</td></tr>`;
+        subOrder[sec].forEach(sub => {
+          if (sub) bodyHtml += `<tr><td colspan="6" style="font-weight:600;text-decoration:underline;">${escapeHtml(sub)}</td></tr>`;
+          const items = tree[sec][sub];
+          items.forEach(item => {
+            const rate = rateMap[item.id];
+            const amount = rate ? Number(item.quantity) * Number(rate) : null;
+            if (amount !== null) grandTotal += amount;
+            bodyHtml += `
+              <tr>
+                <td>${escapeHtml(item.item_code || '')}</td>
+                <td>${escapeHtml(item.description)}</td>
+                <td>${escapeHtml(item.unit)}</td>
+                <td style="text-align:right;">${Number(item.quantity).toFixed(2)}</td>
+                <td style="text-align:right;">${rate ? formatMoney(rate) : ''}</td>
+                <td style="text-align:right;">${amount !== null ? formatMoney(amount) : ''}</td>
+              </tr>`;
+          });
+          const subtotal = computeSubtotal(items, rateMap);
+          if (sub) {
+            bodyHtml += `<tr><td colspan="5" style="text-align:right;font-weight:700;">TO COLLECTION</td><td style="text-align:right;font-weight:700;">${subtotal !== null ? formatMoney(subtotal) : ''}</td></tr>`;
+          }
+        });
+      });
 
       const dateStr = new Date().toLocaleDateString();
       printWindow.document.open();
@@ -635,10 +725,10 @@
         <html>
         <head>
           <meta charset="UTF-8">
-          <title>Bill of Quantities</title>
+          <title>${escapeHtml(titleText)}</title>
           <style>
             body { font-family: -apple-system, Helvetica, Arial, sans-serif; padding: 24px; color: #111; }
-            h1 { font-size: 20px; margin-bottom: 2px; }
+            h1 { font-size: 18px; margin-bottom: 2px; }
             .meta { color: #555; font-size: 12px; margin-bottom: 20px; }
             table { width: 100%; border-collapse: collapse; font-size: 12px; }
             th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
@@ -647,13 +737,13 @@
           </style>
         </head>
         <body>
-          <h1>Neo QS — Bill of Quantities</h1>
+          <h1>${escapeHtml(titleText)}</h1>
           <div class="meta">Generated ${dateStr}</div>
           <table>
             <thead>
               <tr><th>Code</th><th>Description</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>
             </thead>
-            <tbody>${rowsHtml}</tbody>
+            <tbody>${bodyHtml}</tbody>
             <tfoot>
               <tr><td colspan="5" style="text-align:right;">TOTAL PROJECT COST</td><td style="text-align:right;">${formatMoney(grandTotal)}</td></tr>
             </tfoot>
@@ -671,11 +761,11 @@
 
   async function loadBOQ() {
     if (!currentProjectId) return;
-    const tbody = document.getElementById('boq_body');
+    const container = document.getElementById('boq_hierarchy');
     try {
-      const data = await supaGet(`boq_items?select=*&project_id=eq.${currentProjectId}&order=item_code.asc`);
+      const data = await supaGet(`boq_items?select=*&project_id=eq.${currentProjectId}&order=section.asc,subsection.asc,item_code.asc`);
       if (!data || data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No BOQ yet — generate, add, or import one above.</td></tr>';
+        container.innerHTML = '<div class="empty-state">No BOQ yet — generate, add, or import one above.</div>';
         return;
       }
       let costItems = [];
@@ -683,29 +773,43 @@
       const rateMap = {};
       costItems.forEach(c => { rateMap[c.boq_item_id] = c.unit_rate; });
 
+      const { tree, order, subOrder } = groupBOQHierarchy(data);
+
       let grandTotal = 0;
-      tbody.innerHTML = data.map(item => {
-        const rate = rateMap[item.id];
-        const amount = rate ? Number(item.quantity) * Number(rate) : null;
-        if (amount !== null) grandTotal += amount;
-        return `
-        <tr>
-          <td><span class="code-tag">${escapeHtml(item.item_code || '')}</span></td>
-          <td>${escapeHtml(item.description)}</td>
-          <td>${escapeHtml(item.unit)}</td>
-          <td class="qty">${Number(item.quantity).toFixed(2)}</td>
-          <td>${rate ? formatMoney(rate) : '—'}</td>
-          <td class="qty">${amount !== null ? formatMoney(amount) : '—'}</td>
-          <td><button class="delete-btn" onclick="deleteBOQItem('${item.id}')">✕</button></td>
-        </tr>`;
-      }).join('') + `
-        <tr style="font-weight:700;">
-          <td colspan="5" style="text-align:right;color:#8b949e;">TOTAL PROJECT COST</td>
-          <td class="qty">${formatMoney(grandTotal)}</td>
-          <td></td>
-        </tr>`;
+      let html = '';
+      order.forEach(sec => {
+        html += `<div style="font-weight:700;color:#3fb950;margin:16px 0 4px 0;font-size:14px;">${escapeHtml(sec)}</div>`;
+        subOrder[sec].forEach(sub => {
+          if (sub) html += `<div style="font-weight:600;text-decoration:underline;margin:8px 0 4px 0;font-size:13px;color:#c9d1d9;">${escapeHtml(sub)}</div>`;
+          const items = tree[sec][sub];
+          html += `<div class="table-scroll"><table><thead><tr><th>Code</th><th>Description</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Amount</th><th></th></tr></thead><tbody>`;
+          items.forEach(item => {
+            const rate = rateMap[item.id];
+            const amount = rate ? Number(item.quantity) * Number(rate) : null;
+            if (amount !== null) grandTotal += amount;
+            html += `
+              <tr>
+                <td><span class="code-tag">${escapeHtml(item.item_code || '')}</span></td>
+                <td>${escapeHtml(item.description)}</td>
+                <td>${escapeHtml(item.unit)}</td>
+                <td class="qty">${Number(item.quantity).toFixed(2)}</td>
+                <td>${rate ? formatMoney(rate) : '—'}</td>
+                <td class="qty">${amount !== null ? formatMoney(amount) : '—'}</td>
+                <td><button class="delete-btn" onclick="deleteBOQItem('${item.id}')">✕</button></td>
+              </tr>`;
+          });
+          const subtotal = computeSubtotal(items, rateMap);
+          if (sub) {
+            html += `<tr style="font-weight:700;"><td colspan="5" style="text-align:right;color:#8b949e;">TO COLLECTION</td><td class="qty">${subtotal !== null ? formatMoney(subtotal) : '—'}</td><td></td></tr>`;
+          }
+          html += `</tbody></table></div>`;
+        });
+      });
+
+      html += `<div class="total-card" style="margin-top:20px;"><div class="label">TOTAL PROJECT COST</div><div class="value">${formatMoney(grandTotal)}</div></div>`;
+      container.innerHTML = html;
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Error: ${e.message}</td></tr>`;
+      container.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
     }
   }
 
@@ -740,7 +844,9 @@
 
   async function addManualBOQItem() {
     if (!currentProjectId) { showStatus('boq_manualStatus', 'error', 'Not connected yet.'); return; }
-    const item_code = document.getElementById('boq_manualCode').value.trim();
+    const section = document.getElementById('boq_manualSection').value.trim();
+    const subsection = document.getElementById('boq_manualSubsection').value.trim();
+    let item_code = document.getElementById('boq_manualCode').value.trim();
     const description = document.getElementById('boq_manualDescription').value.trim();
     const unit = document.getElementById('boq_manualUnit').value.trim();
     const quantity = document.getElementById('boq_manualQuantity').value;
@@ -748,12 +854,21 @@
     if (!unit) { showStatus('boq_manualStatus', 'error', 'Unit is required.'); return; }
     if (!quantity || isNaN(parseFloat(quantity))) { showStatus('boq_manualStatus', 'error', 'Enter a valid quantity.'); return; }
     try {
+      if (!item_code) {
+        // Auto-assign the next letter within this section/subsection
+        let query = `boq_items?select=item_code&project_id=eq.${currentProjectId}&section=eq.${encodeURIComponent(section || 'General')}`;
+        query += subsection ? `&subsection=eq.${encodeURIComponent(subsection)}` : `&subsection=is.null`;
+        const existing = await supaGet(query);
+        const nextIndex = (existing || []).length;
+        item_code = String.fromCharCode(65 + (nextIndex % 26));
+      }
       await supaPost('boq_items', {
         project_id: currentProjectId, abstract_item_id: null,
-        item_code: item_code || null, description, unit, quantity: parseFloat(quantity)
+        section: section || null, subsection: subsection || null,
+        item_code, description, unit, quantity: parseFloat(quantity)
       }, false);
       showStatus('boq_manualStatus', 'success', 'BOQ line added.');
-      ['boq_manualCode','boq_manualDescription','boq_manualUnit','boq_manualQuantity'].forEach(id => document.getElementById(id).value = '');
+      ['boq_manualSection','boq_manualSubsection','boq_manualCode','boq_manualDescription','boq_manualUnit','boq_manualQuantity'].forEach(id => document.getElementById(id).value = '');
       loadBOQ();
     } catch (e) {
       showStatus('boq_manualStatus', 'error', 'Error: ' + e.message);
@@ -769,6 +884,8 @@
     if (rows.length === 0) { showStatus('boq_importStatus', 'error', 'No rows found.'); return; }
     const items = rows.map(r => ({
       project_id: currentProjectId, abstract_item_id: null,
+      section: r.section || null,
+      subsection: r.subsection || null,
       item_code: r.item_code || r.code || null,
       description: r.description || 'Imported item',
       unit: r.unit || 'item',
@@ -789,20 +906,31 @@
     if (!currentProjectId) { showStatus('boq_genStatus', 'error', 'Not connected yet.'); return; }
     try {
       showStatus('boq_genStatus', 'success', 'Working…');
-      const abstractItems = await supaGet(`abstract_items?select=*&project_id=eq.${currentProjectId}&order=nrm2_category.asc,description.asc`);
+      const abstractItems = await supaGet(`abstract_items?select=*&project_id=eq.${currentProjectId}&order=section.asc,subsection.asc,description.asc`);
       if (!abstractItems || abstractItems.length === 0) {
         showStatus('boq_genStatus', 'error', 'No Abstract found. Generate an Abstract first.');
         return;
       }
-      await supaDelete(`boq_items?project_id=eq.${currentProjectId}`);
-      let categoryIndex = {}, categoryCounters = {}, nextCategoryNum = 1;
+      // Only clear items that came from Abstract generation (has abstract_item_id) -
+      // manual and CSV-imported lines are preserved.
+      const oldAuto = await supaGet(`boq_items?select=id&project_id=eq.${currentProjectId}&abstract_item_id=not.is.null`);
+      if (oldAuto && oldAuto.length > 0) {
+        await supaDelete(`boq_items?project_id=eq.${currentProjectId}&abstract_item_id=not.is.null`);
+      }
+
+      // Assign letters per section+subsection group, resetting for each group
+      let letterCounters = {};
       const newItems = abstractItems.map(item => {
-        const cat = item.nrm2_category || 'General';
-        if (!(cat in categoryIndex)) { categoryIndex[cat] = nextCategoryNum++; categoryCounters[cat] = 0; }
-        categoryCounters[cat] += 1;
-        const item_code = `${categoryIndex[cat]}.${categoryCounters[cat]}`;
+        const sec = item.section || 'General';
+        const sub = item.subsection || '';
+        const key = sec + '|' + sub;
+        if (!(key in letterCounters)) letterCounters[key] = 0;
+        const letter = String.fromCharCode(65 + (letterCounters[key] % 26));
+        letterCounters[key] += 1;
         return {
-          project_id: currentProjectId, abstract_item_id: item.id, item_code,
+          project_id: currentProjectId, abstract_item_id: item.id,
+          section: item.section, subsection: item.subsection,
+          item_code: letter,
           description: buildFullDescription(item), unit: item.unit, quantity: item.total_quantity
         };
       });
@@ -884,6 +1012,7 @@
   // ===================== INIT =====================
   async function init() {
     await ensureProject();
+    await loadProjectTitle();
     await loadMeasurementItems();
     await loadAbstract();
     await loadBOQ();
