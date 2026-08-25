@@ -96,7 +96,7 @@
     <input type="email" id="gate_signInEmail" placeholder="you@example.com">
     <label>Password</label>
     <input type="password" id="gate_signInPassword" placeholder="Your password">
-    <button class="btn" onclick="gateSignIn()">Sign In</button>
+    <button class="btn" onclick="gateSignIn(this)">Sign In</button>
     <div class="status" id="gate_signInStatus"></div>
   </div>
 
@@ -108,7 +108,7 @@
     <input type="email" id="gate_signUpEmail" placeholder="you@example.com">
     <label>Password</label>
     <input type="password" id="gate_signUpPassword" placeholder="At least 6 characters">
-    <button class="btn secondary" onclick="gateSignUp()">Sign Up</button>
+    <button class="btn secondary" onclick="gateSignUp(this)">Sign Up</button>
     <div class="status" id="gate_signUpStatus"></div>
   </div>
 </div>
@@ -331,7 +331,7 @@
       <input type="email" id="auth_signInEmail" placeholder="you@example.com">
       <label>Password</label>
       <input type="password" id="auth_signInPassword" placeholder="Your password">
-      <button class="btn" onclick="doSignIn()">Sign In</button>
+      <button class="btn" onclick="doSignIn(this)">Sign In</button>
       <div class="status" id="auth_signInStatus"></div>
     </div>
 
@@ -344,7 +344,7 @@
       <input type="email" id="auth_signUpEmail" placeholder="you@example.com">
       <label>Password</label>
       <input type="password" id="auth_signUpPassword" placeholder="At least 6 characters">
-      <button class="btn secondary" onclick="doSignUp()">Sign Up</button>
+      <button class="btn secondary" onclick="doSignUp(this)">Sign Up</button>
       <div class="status" id="auth_signUpStatus"></div>
     </div>
   </div>
@@ -577,11 +577,25 @@
     await loadAppData();
   }
 
-  async function doSignUp() {
+  function setButtonLoading(btn, loadingText) {
+    if (!btn) return null;
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = loadingText;
+    return original;
+  }
+  function resetButton(btn, original) {
+    if (!btn) return;
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+
+  async function doSignUp(btn) {
+    const original = setButtonLoading(btn, 'Creating account…');
     const name = document.getElementById('auth_signUpName').value.trim();
     const email = document.getElementById('auth_signUpEmail').value.trim();
     const password = document.getElementById('auth_signUpPassword').value;
-    if (!email || !password) { showStatus('auth_signUpStatus', 'error', 'Enter an email and password.'); return; }
+    if (!email || !password) { showStatus('auth_signUpStatus', 'error', 'Enter an email and password.'); resetButton(btn, original); return; }
     try {
       const data = await supaAuthRequest('signup', { email, password, data: { full_name: name || null } });
       if (data.access_token) {
@@ -592,39 +606,48 @@
       }
     } catch (e) {
       showStatus('auth_signUpStatus', 'error', 'Error: ' + e.message);
+    } finally {
+      resetButton(btn, original);
     }
   }
 
-  async function doSignIn() {
+  async function doSignIn(btn) {
+    const original = setButtonLoading(btn, 'Signing in…');
     const email = document.getElementById('auth_signInEmail').value.trim();
     const password = document.getElementById('auth_signInPassword').value;
-    if (!email || !password) { showStatus('auth_signInStatus', 'error', 'Enter an email and password.'); return; }
+    if (!email || !password) { showStatus('auth_signInStatus', 'error', 'Enter an email and password.'); resetButton(btn, original); return; }
     try {
       const data = await supaAuthRequest('token?grant_type=password', { email, password });
       showStatus('auth_signInStatus', 'success', 'Signed in.');
       await afterAuthSuccess(data);
     } catch (e) {
       showStatus('auth_signInStatus', 'error', 'Error: ' + e.message);
+    } finally {
+      resetButton(btn, original);
     }
   }
 
-  async function gateSignIn() {
+  async function gateSignIn(btn) {
+    const original = setButtonLoading(btn, 'Signing in…');
     const email = document.getElementById('gate_signInEmail').value.trim();
     const password = document.getElementById('gate_signInPassword').value;
-    if (!email || !password) { showStatus('gate_signInStatus', 'error', 'Enter an email and password.'); return; }
+    if (!email || !password) { showStatus('gate_signInStatus', 'error', 'Enter an email and password.'); resetButton(btn, original); return; }
     try {
       const data = await supaAuthRequest('token?grant_type=password', { email, password });
       await afterAuthSuccess(data);
     } catch (e) {
       showStatus('gate_signInStatus', 'error', 'Error: ' + e.message);
+    } finally {
+      resetButton(btn, original);
     }
   }
 
-  async function gateSignUp() {
+  async function gateSignUp(btn) {
+    const original = setButtonLoading(btn, 'Creating account…');
     const name = document.getElementById('gate_signUpName').value.trim();
     const email = document.getElementById('gate_signUpEmail').value.trim();
     const password = document.getElementById('gate_signUpPassword').value;
-    if (!email || !password) { showStatus('gate_signUpStatus', 'error', 'Enter an email and password.'); return; }
+    if (!email || !password) { showStatus('gate_signUpStatus', 'error', 'Enter an email and password.'); resetButton(btn, original); return; }
     try {
       const data = await supaAuthRequest('signup', { email, password, data: { full_name: name || null } });
       if (data.access_token) {
@@ -634,6 +657,8 @@
       }
     } catch (e) {
       showStatus('gate_signUpStatus', 'error', 'Error: ' + e.message);
+    } finally {
+      resetButton(btn, original);
     }
   }
 
