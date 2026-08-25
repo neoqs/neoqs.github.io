@@ -102,6 +102,8 @@
 
   <div class="card">
     <h3>Create Account</h3>
+    <label>Full Name</label>
+    <input type="text" id="gate_signUpName" placeholder="Your full name">
     <label>Email</label>
     <input type="email" id="gate_signUpEmail" placeholder="you@example.com">
     <label>Password</label>
@@ -133,7 +135,7 @@
   <div class="nav-item" data-section="settings" onclick="showSection('settings')"><span class="icon">⚙️</span> Settings</div>
   <div class="drawer-footer">
     <div class="avatar">👤</div>
-    <div>Quantity Surveyor</div>
+    <div id="drawer_userName">Quantity Surveyor</div>
   </div>
 </div>
 
@@ -336,6 +338,8 @@
     <div class="card" id="auth_signUpCard">
       <h3>Create Account</h3>
       <p class="hint">Sign up to own your projects. Data you create without an account remains accessible to anyone with the link until you sign up.</p>
+      <label>Full Name</label>
+      <input type="text" id="auth_signUpName" placeholder="Your full name">
       <label>Email</label>
       <input type="email" id="auth_signUpEmail" placeholder="you@example.com">
       <label>Password</label>
@@ -482,15 +486,19 @@
     const signedIn = document.getElementById('auth_signedInCard');
     const signedOut = document.getElementById('auth_signedOutCard');
     const signUp = document.getElementById('auth_signUpCard');
+    const drawerName = document.getElementById('drawer_userName');
     if (currentUser) {
       signedIn.style.display = 'block';
       signedOut.style.display = 'none';
       signUp.style.display = 'none';
-      document.getElementById('auth_signedInEmail').textContent = 'Signed in as ' + currentUser.email;
+      const name = currentUser.user_metadata && currentUser.user_metadata.full_name;
+      document.getElementById('auth_signedInEmail').textContent = 'Signed in as ' + (name ? name + ' (' + currentUser.email + ')' : currentUser.email);
+      drawerName.textContent = name || currentUser.email;
     } else {
       signedIn.style.display = 'none';
       signedOut.style.display = 'block';
       signUp.style.display = 'block';
+      drawerName.textContent = 'Quantity Surveyor';
     }
   }
 
@@ -520,24 +528,55 @@
     } catch (e) { clearSession(); }
   }
 
-  async function afterAuthSuccess(data) {
+  async function logEvent(eventType) {
+    if (!currentUser) return;
+    try {
+      await supaPost('usage_events', {
+        user_id: currentUser.id, project_id: currentProjectId, event_type: eventType
+      }, false);
+    } catch (e) { /* never block the UI for analytics failures */ }
+  }
+
+  async function updateProfile() {
+    if (!currentUser) return;
+    const fullName = (currentUser.user_metadata && currentUser.user_metadata.full_name) || null;
+    try {
+      const existing = await supaGet(`profiles?select=login_count&id=eq.${currentUser.id}&limit=1`);
+      if (existing && existing.length > 0) {
+        await supaPatch(`profiles?id=eq.${currentUser.id}`, {
+          login_count: (existing[0].login_count || 0) + 1,
+          last_login: new Date().toISOString(),
+          full_name: fullName
+        });
+      } else {
+        await supaPost('profiles', {
+          id: currentUser.id, full_name: fullName, login_count: 1, last_login: new Date().toISOString()
+        }, false);
+      }
+    } catch (e) { /* never block login for analytics failures */ }
+  }
+
+  async function afterAuthSuccess(data, eventType) {
     currentAccessToken = data.access_token;
     currentUser = data.user;
     saveSession(data);
     updateAuthUI();
     hideAuthGate();
+    await updateProfile();
+    await logEvent(eventType || 'sign_in');
     await loadAppData();
   }
 
   async function doSignUp() {
+    const name = document.getElementById('auth_signUpName').value.trim();
     const email = document.getElementById('auth_signUpEmail').value.trim();
     const password = document.getElementById('auth_signUpPassword').value;
     if (!email || !password) { showStatus('auth_signUpStatus', 'error', 'Enter an email and password.'); return; }
     try {
-      const data = await supaAuthRequest('signup', { email, password });
+      const data = await supaAuthRequest('signup', { email, password, data: { full_name: name || null } });
       if (data.access_token) {
         showStatus('auth_signUpStatus', 'success', 'Account created and signed in.');
-        await afterAuthSuccess(data);
+        await afterAuthSuccess(data, 'sign_up');
       } else {
         showStatus('auth_signUpStatus', 'success', 'Account created. Check your email to confirm, then sign in below.');
       }
@@ -572,13 +611,14 @@
   }
 
   async function gateSignUp() {
+    const name = document.getElementById('gate_signUpName').value.trim();
     const email = document.getElementById('gate_signUpEmail').value.trim();
     const password = document.getElementById('gate_signUpPassword').value;
     if (!email || !password) { showStatus('gate_signUpStatus', 'error', 'Enter an email and password.'); return; }
     try {
-      const data = await supaAuthRequest('signup', { email, password });
+      const data = await supaAuthRequest('signup', { email, password, data: { full_name: name || null } });
       if (data.access_token) {
-        await afterAuthSuccess(data);
+        await afterAuthSuccess(data, 'sign_up');
       } else {
         showStatus('gate_signUpStatus', 'success', 'Account created. Check your email to confirm, then sign in above.');
       }
@@ -670,6 +710,7 @@
       showStatus('proj_createStatus', 'success', 'Project created.');
       document.getElementById('proj_newName').value = '';
       await switchProject(created[0].id);
+      await logEvent('project_created');
     } catch (e) {
       showStatus('proj_createStatus', 'error', 'Error: ' + e.message);
     }
@@ -936,6 +977,7 @@
       }
       showStatus('ab_genStatus', 'success', `Abstract generated: ${Object.keys(groups).length} line(s).`);
       loadAbstract();
+      await logEvent('abstract_generated');
     } catch (e) {
       showStatus('ab_genStatus', 'error', 'Error: ' + e.message);
     }
@@ -1087,6 +1129,7 @@
       `);
       printWindow.document.close();
       setTimeout(() => { printWindow.print(); }, 300);
+      await logEvent('boq_pdf_exported');
     } catch (e) {
       printWindow.close();
       alert('Export failed: ' + e.message);
@@ -1271,6 +1314,7 @@
       await supaPost('boq_items', newItems, false);
       showStatus('boq_genStatus', 'success', `BOQ generated: ${newItems.length} line(s).`);
       loadBOQ();
+      await logEvent('boq_generated');
     } catch (e) {
       showStatus('boq_genStatus', 'error', 'Error: ' + e.message);
     }
@@ -1450,6 +1494,7 @@
       `);
       printWindow.document.close();
       setTimeout(() => { printWindow.print(); }, 300);
+      await logEvent('cost_pdf_exported');
     } catch (e) {
       printWindow.close();
       alert('Export failed: ' + e.message);
