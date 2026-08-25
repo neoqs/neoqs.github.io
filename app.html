@@ -86,13 +86,17 @@
 
 <div class="topbar">
   <button class="hamburger" onclick="toggleDrawer()">☰</button>
-  <h1><span class="neo">Neo</span> <span class="qs">QS</span></h1>
+  <div>
+    <h1><span class="neo">Neo</span> <span class="qs">QS</span></h1>
+    <div id="topbar_project_name" style="font-size:11px;color:#8b949e;margin-top:2px;"></div>
+  </div>
 </div>
 
 <div class="overlay" id="overlay" onclick="closeDrawer()"></div>
 
 <div class="drawer" id="drawer">
   <div class="brand"><span class="neo">NEO</span> <span class="qs">QS</span></div>
+  <div class="nav-item" data-section="projects" onclick="showSection('projects')"><span class="icon">🗂️</span> Projects</div>
   <div class="nav-item active" data-section="measure" onclick="showSection('measure')"><span class="icon">📏</span> Measurement</div>
   <div class="nav-item" data-section="abstract" onclick="showSection('abstract')"><span class="icon">📋</span> Abstract</div>
   <div class="nav-item" data-section="boq" onclick="showSection('boq')"><span class="icon">📄</span> BOQ</div>
@@ -106,6 +110,25 @@
 
 <div class="content">
   <div class="banner error" id="globalError"></div>
+
+  <!-- ============ PROJECTS ============ -->
+  <div class="section" id="section-projects">
+    <h2 class="page-title">Projects</h2>
+    <div class="subtitle">Switch between projects or start a new one</div>
+
+    <div class="card">
+      <h3>New Project</h3>
+      <label>Project Name</label>
+      <input type="text" id="proj_newName" placeholder="e.g. Director General Residence">
+      <button class="btn" onclick="createProject()">Create Project</button>
+      <div class="status" id="proj_createStatus"></div>
+    </div>
+
+    <div class="card">
+      <h3>All Projects</h3>
+      <div id="proj_list"><div class="empty-state">Fetching…</div></div>
+    </div>
+  </div>
 
   <!-- ============ MEASURE ============ -->
   <div class="section active" id="section-measure">
@@ -371,17 +394,116 @@
     });
   }
 
+  function getSavedProjectId() {
+    try { return localStorage.getItem('neoqs_current_project'); } catch (e) { return null; }
+  }
+  function saveProjectId(id) {
+    try { localStorage.setItem('neoqs_current_project', id); } catch (e) { /* ignore if unavailable */ }
+  }
+
   async function ensureProject() {
     try {
-      const existing = await supaGet('projects?select=id&limit=1');
+      const savedId = getSavedProjectId();
+      if (savedId) {
+        const check = await supaGet(`projects?select=id&id=eq.${savedId}&limit=1`);
+        if (check && check.length > 0) {
+          currentProjectId = savedId;
+          return;
+        }
+      }
+      const existing = await supaGet('projects?select=id&order=created_at.desc&limit=1');
       if (existing && existing.length > 0) {
         currentProjectId = existing[0].id;
       } else {
         const created = await supaPost('projects', { name: 'My First Project' }, true);
         currentProjectId = created[0].id;
       }
+      saveProjectId(currentProjectId);
     } catch (e) {
       showGlobalError('Could not connect to Supabase: ' + e.message);
+    }
+  }
+
+  async function updateTopbarProjectName() {
+    const el = document.getElementById('topbar_project_name');
+    if (!currentProjectId) { el.textContent = ''; return; }
+    try {
+      const rows = await supaGet(`projects?select=name&id=eq.${currentProjectId}&limit=1`);
+      el.textContent = (rows && rows.length > 0) ? rows[0].name : '';
+    } catch (e) { el.textContent = ''; }
+  }
+
+  async function switchProject(id) {
+    currentProjectId = id;
+    saveProjectId(id);
+    await updateTopbarProjectName();
+    await loadProjectTitle();
+    await loadMeasurementItems();
+    await loadAbstract();
+    await loadBOQ();
+    await loadCostData();
+    await loadProjectsList();
+    showSection('measure');
+  }
+
+  async function createProject() {
+    const name = document.getElementById('proj_newName').value.trim();
+    if (!name) { showStatus('proj_createStatus', 'error', 'Enter a project name.'); return; }
+    try {
+      const created = await supaPost('projects', { name }, true);
+      showStatus('proj_createStatus', 'success', 'Project created.');
+      document.getElementById('proj_newName').value = '';
+      await switchProject(created[0].id);
+    } catch (e) {
+      showStatus('proj_createStatus', 'error', 'Error: ' + e.message);
+    }
+  }
+
+  let deleteProjectArmed = {};
+  async function deleteProject(id, btn) {
+    if (!deleteProjectArmed[id]) {
+      deleteProjectArmed[id] = true;
+      btn.textContent = 'Tap again to confirm delete';
+      setTimeout(() => { deleteProjectArmed[id] = false; btn.textContent = 'Delete'; }, 4000);
+      return;
+    }
+    deleteProjectArmed[id] = false;
+    try {
+      await supaDelete(`projects?id=eq.${id}`);
+      if (currentProjectId === id) {
+        currentProjectId = null;
+        try { localStorage.removeItem('neoqs_current_project'); } catch (e) {}
+        await ensureProject();
+        await switchProject(currentProjectId);
+      }
+      await loadProjectsList();
+    } catch (e) {
+      alert('Delete failed: ' + e.message);
+    }
+  }
+
+  async function loadProjectsList() {
+    const container = document.getElementById('proj_list');
+    try {
+      const rows = await supaGet('projects?select=*&order=created_at.desc');
+      if (!rows || rows.length === 0) {
+        container.innerHTML = '<div class="empty-state">No projects yet — create one above.</div>';
+        return;
+      }
+      container.innerHTML = rows.map(p => {
+        const isCurrent = p.id === currentProjectId;
+        return `
+          <div class="card" style="border-color:${isCurrent ? '#3fb950' : '#30363d'};margin-bottom:10px;">
+            <div style="font-weight:700;${isCurrent ? 'color:#3fb950;' : ''}">${escapeHtml(p.name)}${isCurrent ? ' (current)' : ''}</div>
+            ${p.title ? `<div style="color:#8b949e;font-size:12px;margin-top:2px;">${escapeHtml(p.title)}</div>` : ''}
+            <div style="display:flex;gap:8px;margin-top:10px;">
+              ${!isCurrent ? `<button class="btn" style="margin-top:0;" onclick="switchProject('${p.id}')">Switch to this project</button>` : ''}
+              <button class="btn danger" style="margin-top:0;" onclick="deleteProject('${p.id}', this)">Delete</button>
+            </div>
+          </div>`;
+      }).join('');
+    } catch (e) {
+      container.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
     }
   }
 
@@ -1121,11 +1243,13 @@
   // ===================== INIT =====================
   async function init() {
     await ensureProject();
+    await updateTopbarProjectName();
     await loadProjectTitle();
     await loadMeasurementItems();
     await loadAbstract();
     await loadBOQ();
     await loadCostData();
+    await loadProjectsList();
   }
 
   init();
