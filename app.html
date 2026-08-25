@@ -254,12 +254,8 @@
 
     <div class="card">
       <h3>Priced Items</h3>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>Description</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
-          <tbody id="cost_body"><tr><td colspan="5" class="empty-state">Fetching…</td></tr></tbody>
-        </table>
-      </div>
+      <button class="btn" style="background:#8957e5;margin-bottom:12px;" onclick="exportCostAsPDF()">Export Cost Summary as PDF</button>
+      <div id="cost_hierarchy"><div class="empty-state">Fetching…</div></div>
     </div>
   </div>
 
@@ -973,11 +969,11 @@
 
   async function loadCostData() {
     if (!currentProjectId) return;
-    const tbody = document.getElementById('cost_body');
+    const container = document.getElementById('cost_hierarchy');
     try {
-      const boqItems = await supaGet(`boq_items?select=*&project_id=eq.${currentProjectId}&order=item_code.asc`);
+      const boqItems = await supaGet(`boq_items?select=*&project_id=eq.${currentProjectId}&order=section.asc,subsection.asc,item_code.asc`);
       if (!boqItems || boqItems.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No BOQ found. Generate or import a BOQ first.</td></tr>';
+        container.innerHTML = '<div class="empty-state">No BOQ found. Generate or import a BOQ first.</div>';
         document.getElementById('cost_total').textContent = '—';
         return;
       }
@@ -985,27 +981,140 @@
       const rateMap = {};
       costItems.forEach(c => { rateMap[c.boq_item_id] = c.unit_rate; });
 
-      let total = 0;
-      tbody.innerHTML = boqItems.map(item => {
-        const rate = rateMap[item.id];
-        const amount = rate ? (Number(item.quantity) * Number(rate)) : null;
-        if (amount !== null) total += amount;
-        return `
-        <tr>
-          <td>${escapeHtml(item.description)}</td>
-          <td>${escapeHtml(item.unit)}</td>
-          <td class="qty">${Number(item.quantity).toFixed(2)}</td>
-          <td>
-            <input type="number" step="any" class="rate-input" id="rate-${item.id}" value="${rate || ''}" placeholder="0.00">
-            <button class="save-btn" onclick="saveRate('${item.id}', document.getElementById('rate-${item.id}'), document.getElementById('status-${item.id}'))">Save</button>
-            <div class="status" id="status-${item.id}"></div>
-          </td>
-          <td class="amount">${amount !== null ? formatMoney(amount) : '—'}</td>
-        </tr>`;
-      }).join('');
-      document.getElementById('cost_total').textContent = '₦' + formatMoney(total);
+      const { tree, order, subOrder } = groupBOQHierarchy(boqItems);
+
+      let grandTotal = 0;
+      let html = '';
+      order.forEach(sec => {
+        html += `<div style="font-weight:700;color:#3fb950;margin:16px 0 4px 0;font-size:14px;">${escapeHtml(sec)}</div>`;
+        subOrder[sec].forEach(sub => {
+          if (sub) html += `<div style="font-weight:600;text-decoration:underline;margin:8px 0 4px 0;font-size:13px;color:#c9d1d9;">${escapeHtml(sub)}</div>`;
+          const items = tree[sec][sub];
+          html += `<div class="table-scroll"><table><thead><tr><th>Description</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>`;
+          items.forEach(item => {
+            const rate = rateMap[item.id];
+            const amount = rate ? (Number(item.quantity) * Number(rate)) : null;
+            if (amount !== null) grandTotal += amount;
+            html += `
+              <tr>
+                <td>${escapeHtml(item.description)}</td>
+                <td>${escapeHtml(item.unit)}</td>
+                <td class="qty">${Number(item.quantity).toFixed(2)}</td>
+                <td>
+                  <input type="number" step="any" class="rate-input" id="rate-${item.id}" value="${rate || ''}" placeholder="0.00">
+                  <button class="save-btn" onclick="saveRate('${item.id}', document.getElementById('rate-${item.id}'), document.getElementById('status-${item.id}'))">Save</button>
+                  <div class="status" id="status-${item.id}"></div>
+                </td>
+                <td class="amount">${amount !== null ? formatMoney(amount) : '—'}</td>
+              </tr>`;
+          });
+          const subtotal = computeSubtotal(items, rateMap);
+          if (sub) {
+            html += `<tr style="font-weight:700;"><td colspan="4" style="text-align:right;color:#8b949e;">TO COLLECTION</td><td class="amount">${subtotal !== null ? formatMoney(subtotal) : '—'}</td></tr>`;
+          }
+          html += `</tbody></table></div>`;
+        });
+      });
+
+      container.innerHTML = html;
+      document.getElementById('cost_total').textContent = '₦' + formatMoney(grandTotal);
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Error: ${e.message}</td></tr>`;
+      container.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+    }
+  }
+
+  async function exportCostAsPDF() {
+    if (!currentProjectId) { alert('Not connected yet.'); return; }
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Could not open export window. Please allow pop-ups for this site in Safari settings and try again.');
+      return;
+    }
+    printWindow.document.write('<p style="font-family:sans-serif;padding:20px;">Preparing your Cost Summary export…</p>');
+    try {
+      const boqItems = await supaGet(`boq_items?select=*&project_id=eq.${currentProjectId}&order=section.asc,subsection.asc,item_code.asc`);
+      if (!boqItems || boqItems.length === 0) {
+        printWindow.close();
+        alert('No BOQ items to export. Generate or add a BOQ first.');
+        return;
+      }
+      const costItems = await supaGet(`cost_items?select=*&project_id=eq.${currentProjectId}`);
+      const rateMap = {};
+      costItems.forEach(c => { rateMap[c.boq_item_id] = c.unit_rate; });
+
+      let titleText = 'Cost Summary';
+      try {
+        const rows = await supaGet(`projects?select=title&id=eq.${currentProjectId}&limit=1`);
+        if (rows && rows.length > 0 && rows[0].title) titleText = rows[0].title + ' — Cost Summary';
+      } catch (e) {}
+
+      const { tree, order, subOrder } = groupBOQHierarchy(boqItems);
+
+      let grandTotal = 0;
+      let bodyHtml = '';
+      order.forEach(sec => {
+        bodyHtml += `<tr><td colspan="5" style="background:#e0e0e0;font-weight:700;">${escapeHtml(sec)}</td></tr>`;
+        subOrder[sec].forEach(sub => {
+          if (sub) bodyHtml += `<tr><td colspan="5" style="font-weight:600;text-decoration:underline;">${escapeHtml(sub)}</td></tr>`;
+          const items = tree[sec][sub];
+          items.forEach(item => {
+            const rate = rateMap[item.id];
+            const amount = rate ? Number(item.quantity) * Number(rate) : null;
+            if (amount !== null) grandTotal += amount;
+            bodyHtml += `
+              <tr>
+                <td>${escapeHtml(item.description)}</td>
+                <td>${escapeHtml(item.unit)}</td>
+                <td style="text-align:right;">${Number(item.quantity).toFixed(2)}</td>
+                <td style="text-align:right;">${rate ? formatMoney(rate) : ''}</td>
+                <td style="text-align:right;">${amount !== null ? formatMoney(amount) : ''}</td>
+              </tr>`;
+          });
+          const subtotal = computeSubtotal(items, rateMap);
+          if (sub) {
+            bodyHtml += `<tr><td colspan="4" style="text-align:right;font-weight:700;">TO COLLECTION</td><td style="text-align:right;font-weight:700;">${subtotal !== null ? formatMoney(subtotal) : ''}</td></tr>`;
+          }
+        });
+      });
+
+      const dateStr = new Date().toLocaleDateString();
+      printWindow.document.open();
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>${escapeHtml(titleText)}</title>
+          <style>
+            body { font-family: -apple-system, Helvetica, Arial, sans-serif; padding: 24px; color: #111; }
+            h1 { font-size: 18px; margin-bottom: 2px; }
+            .meta { color: #555; font-size: 12px; margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+            th { background: #f0f0f0; }
+            tfoot td { font-weight: bold; background: #f7f7f7; }
+          </style>
+        </head>
+        <body>
+          <h1>${escapeHtml(titleText)}</h1>
+          <div class="meta">Generated ${dateStr}</div>
+          <table>
+            <thead>
+              <tr><th>Description</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>
+            </thead>
+            <tbody>${bodyHtml}</tbody>
+            <tfoot>
+              <tr><td colspan="4" style="text-align:right;">TOTAL PROJECT COST</td><td style="text-align:right;">${formatMoney(grandTotal)}</td></tr>
+            </tfoot>
+          </table>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+      setTimeout(() => { printWindow.print(); }, 300);
+    } catch (e) {
+      printWindow.close();
+      alert('Export failed: ' + e.message);
     }
   }
 
