@@ -285,9 +285,34 @@
   <!-- ============ SETTINGS ============ -->
   <div class="section" id="section-settings">
     <h2 class="page-title">Settings</h2>
-    <div class="subtitle">Account and app settings</div>
-    <div class="card">
-      <p class="hint">Sign in, account management, and app preferences are coming soon. For now, all data is stored under a single default project.</p>
+    <div class="subtitle">Account</div>
+
+    <div class="card" id="auth_signedInCard" style="display:none;">
+      <h3>Signed In</h3>
+      <p class="hint" id="auth_signedInEmail"></p>
+      <button class="btn danger" onclick="doSignOut()">Sign Out</button>
+      <div class="status" id="auth_signOutStatus"></div>
+    </div>
+
+    <div class="card" id="auth_signedOutCard">
+      <h3>Sign In</h3>
+      <label>Email</label>
+      <input type="email" id="auth_signInEmail" placeholder="you@example.com">
+      <label>Password</label>
+      <input type="password" id="auth_signInPassword" placeholder="Your password">
+      <button class="btn" onclick="doSignIn()">Sign In</button>
+      <div class="status" id="auth_signInStatus"></div>
+    </div>
+
+    <div class="card" id="auth_signUpCard">
+      <h3>Create Account</h3>
+      <p class="hint">Sign up to own your projects. Data you create without an account remains accessible to anyone with the link until you sign up.</p>
+      <label>Email</label>
+      <input type="email" id="auth_signUpEmail" placeholder="you@example.com">
+      <label>Password</label>
+      <input type="password" id="auth_signUpPassword" placeholder="At least 6 characters">
+      <button class="btn secondary" onclick="doSignUp()">Sign Up</button>
+      <div class="status" id="auth_signUpStatus"></div>
     </div>
   </div>
 
@@ -298,6 +323,8 @@
   const SUPABASE_URL = "https://krnhvacnsluescndjobp.supabase.co";
   const SUPABASE_KEY = "sb_publishable_qJsuE50avRGjP44LddactA_C86KRBC_";
   let currentProjectId = null;
+  let currentUser = null;
+  let currentAccessToken = null;
 
   function toggleDrawer() {
     document.getElementById('drawer').classList.toggle('open');
@@ -339,9 +366,13 @@
     return Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+  function authHeader() {
+    return currentAccessToken || SUPABASE_KEY;
+  }
+
   async function supaGet(path) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + authHeader() }
     });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
@@ -351,7 +382,7 @@
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
       method: 'POST',
       headers: {
-        'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + authHeader(),
         'Content-Type': 'application/json',
         'Prefer': preferReturn ? 'return=representation' : 'return=minimal'
       },
@@ -365,7 +396,7 @@
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
       method: 'PATCH',
       headers: {
-        'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + authHeader(),
         'Content-Type': 'application/json',
         'Prefer': 'return=minimal'
       },
@@ -377,9 +408,123 @@
   async function supaDelete(path) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
       method: 'DELETE',
-      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + authHeader() }
     });
     if (!res.ok) throw new Error(await res.text());
+  }
+
+  // ===================== AUTH =====================
+  async function supaAuthRequest(path, body) {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error_description || data.msg || data.error || 'Request failed');
+    return data;
+  }
+
+  function saveSession(data) {
+    try {
+      localStorage.setItem('neoqs_session', JSON.stringify({
+        access_token: data.access_token, refresh_token: data.refresh_token, user: data.user
+      }));
+    } catch (e) { /* ignore if unavailable */ }
+  }
+
+  function clearSession() {
+    try { localStorage.removeItem('neoqs_session'); } catch (e) {}
+    currentAccessToken = null;
+    currentUser = null;
+  }
+
+  function loadSavedSession() {
+    try {
+      const raw = localStorage.getItem('neoqs_session');
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) { return null; }
+  }
+
+  function updateAuthUI() {
+    const signedIn = document.getElementById('auth_signedInCard');
+    const signedOut = document.getElementById('auth_signedOutCard');
+    const signUp = document.getElementById('auth_signUpCard');
+    if (currentUser) {
+      signedIn.style.display = 'block';
+      signedOut.style.display = 'none';
+      signUp.style.display = 'none';
+      document.getElementById('auth_signedInEmail').textContent = 'Signed in as ' + currentUser.email;
+    } else {
+      signedIn.style.display = 'none';
+      signedOut.style.display = 'block';
+      signUp.style.display = 'block';
+    }
+  }
+
+  async function restoreSession() {
+    const saved = loadSavedSession();
+    if (!saved || !saved.access_token) return;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + saved.access_token }
+      });
+      if (res.ok) {
+        currentAccessToken = saved.access_token;
+        currentUser = saved.user;
+      } else {
+        clearSession();
+      }
+    } catch (e) { clearSession(); }
+  }
+
+  async function doSignUp() {
+    const email = document.getElementById('auth_signUpEmail').value.trim();
+    const password = document.getElementById('auth_signUpPassword').value;
+    if (!email || !password) { showStatus('auth_signUpStatus', 'error', 'Enter an email and password.'); return; }
+    try {
+      const data = await supaAuthRequest('signup', { email, password });
+      if (data.access_token) {
+        currentAccessToken = data.access_token;
+        currentUser = data.user;
+        saveSession(data);
+        updateAuthUI();
+        showStatus('auth_signUpStatus', 'success', 'Account created and signed in.');
+      } else {
+        showStatus('auth_signUpStatus', 'success', 'Account created. Check your email to confirm, then sign in below.');
+      }
+    } catch (e) {
+      showStatus('auth_signUpStatus', 'error', 'Error: ' + e.message);
+    }
+  }
+
+  async function doSignIn() {
+    const email = document.getElementById('auth_signInEmail').value.trim();
+    const password = document.getElementById('auth_signInPassword').value;
+    if (!email || !password) { showStatus('auth_signInStatus', 'error', 'Enter an email and password.'); return; }
+    try {
+      const data = await supaAuthRequest('token?grant_type=password', { email, password });
+      currentAccessToken = data.access_token;
+      currentUser = data.user;
+      saveSession(data);
+      updateAuthUI();
+      showStatus('auth_signInStatus', 'success', 'Signed in.');
+    } catch (e) {
+      showStatus('auth_signInStatus', 'error', 'Error: ' + e.message);
+    }
+  }
+
+  async function doSignOut() {
+    try {
+      await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + authHeader() }
+      });
+    } catch (e) { /* proceed to clear locally regardless */ }
+    clearSession();
+    updateAuthUI();
+    showStatus('auth_signOutStatus', 'success', 'Signed out.');
   }
 
   function parseCSV(text) {
@@ -450,7 +595,7 @@
     const name = document.getElementById('proj_newName').value.trim();
     if (!name) { showStatus('proj_createStatus', 'error', 'Enter a project name.'); return; }
     try {
-      const created = await supaPost('projects', { name }, true);
+      const created = await supaPost('projects', { name, user_id: currentUser ? currentUser.id : null }, true);
       showStatus('proj_createStatus', 'success', 'Project created.');
       document.getElementById('proj_newName').value = '';
       await switchProject(created[0].id);
@@ -1242,6 +1387,8 @@
 
   // ===================== INIT =====================
   async function init() {
+    await restoreSession();
+    updateAuthUI();
     await ensureProject();
     await updateTopbarProjectName();
     await loadProjectTitle();
