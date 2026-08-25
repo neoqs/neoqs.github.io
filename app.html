@@ -376,6 +376,16 @@
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     document.querySelector('.nav-item[data-section="' + name + '"]').classList.add('active');
     closeDrawer();
+    refreshSection(name);
+  }
+
+  function refreshSection(name) {
+    if (!currentProjectId) return;
+    if (name === 'measure') loadMeasurementItems();
+    else if (name === 'abstract') loadAbstract();
+    else if (name === 'boq') loadBOQ();
+    else if (name === 'cost') loadCostData();
+    else if (name === 'projects') loadProjectsList();
   }
 
   function showGlobalError(msg) {
