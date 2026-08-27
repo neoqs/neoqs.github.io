@@ -168,6 +168,26 @@
     <div class="subtitle">Dimension paper: Timesing × Dimensions = Squaring</div>
 
     <div class="card">
+      <h3>Measure from Drawing</h3>
+      <p class="hint" id="tk_drawingHint">Upload a drawing image (JPG/PNG), then tap two points on a known dimension to calibrate scale. After that, tap any two points to measure real distances.</p>
+      <input type="file" id="tk_drawingFile" accept="image/*" onchange="loadDrawingImage(event)">
+      <div id="tk_canvasWrap" style="display:none; margin-top:12px;">
+        <canvas id="tk_canvas" style="width:100%; border:1px solid #30363d; border-radius:6px; touch-action:none;"></canvas>
+        <div class="status" id="tk_drawingStatus" style="display:block; margin-top:8px;">Tap two points on a known dimension to calibrate.</div>
+        <div id="tk_calibrateForm" style="display:none; margin-top:10px;">
+          <label>Real-world length of that line (metres)</label>
+          <input type="number" step="any" id="tk_knownLength" placeholder="e.g. 3.00">
+          <button class="btn" onclick="setCalibration()">Set Scale</button>
+        </div>
+        <div id="tk_measuredResult" style="display:none; margin-top:10px;">
+          <p class="hint">Measured distance: <span id="tk_measuredValue" style="color:#7ee787; font-weight:700;">—</span> m</p>
+          <button class="btn" onclick="useMeasuredDistance()">Use as Dimension 1</button>
+          <button class="btn secondary" onclick="resetDrawingPoints()">Measure Again</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
       <h3>Add Dimension Line</h3>
       <label>Section (e.g. Main Building)</label>
       <input type="text" id="tk_section" placeholder="e.g. Main Building">
@@ -852,6 +872,118 @@
     } catch (e) {
       container.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
     }
+  }
+
+  // ===================== TAKEOFF: MEASURE FROM DRAWING =====================
+  let drawingImage = null;
+  let drawingCanvas = null;
+  let drawingCtx = null;
+  let clickedPoints = [];
+  let pixelsPerMetre = null; // set once calibrated
+  let lastMeasuredDistance = null;
+
+  function loadDrawingImage(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const img = new Image();
+    img.onload = function() {
+      drawingImage = img;
+      const canvas = document.getElementById('tk_canvas');
+      // Cap canvas resolution so huge photos stay responsive; scale display via CSS
+      const maxWidth = 1000;
+      const scale = img.width > maxWidth ? maxWidth / img.width : 1;
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      drawingCanvas = canvas;
+      drawingCtx = canvas.getContext('2d');
+      document.getElementById('tk_canvasWrap').style.display = 'block';
+      resetDrawingPoints();
+      redrawCanvas();
+      canvas.onclick = handleCanvasClick;
+    };
+    img.src = URL.createObjectURL(file);
+  }
+
+  function redrawCanvas() {
+    if (!drawingCtx || !drawingImage) return;
+    drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+    drawingCtx.drawImage(drawingImage, 0, 0, drawingCanvas.width, drawingCanvas.height);
+    clickedPoints.forEach(p => {
+      drawingCtx.beginPath();
+      drawingCtx.arc(p.x, p.y, 6, 0, 2 * Math.PI);
+      drawingCtx.fillStyle = '#3fb950';
+      drawingCtx.fill();
+    });
+    if (clickedPoints.length === 2) {
+      drawingCtx.beginPath();
+      drawingCtx.moveTo(clickedPoints[0].x, clickedPoints[0].y);
+      drawingCtx.lineTo(clickedPoints[1].x, clickedPoints[1].y);
+      drawingCtx.strokeStyle = '#3fb950';
+      drawingCtx.lineWidth = 2;
+      drawingCtx.stroke();
+    }
+  }
+
+  function handleCanvasClick(event) {
+    const rect = drawingCanvas.getBoundingClientRect();
+    // Account for CSS scaling (canvas display width may differ from actual pixel width)
+    const scaleX = drawingCanvas.width / rect.width;
+    const scaleY = drawingCanvas.height / rect.height;
+    const x = (event.clientX - rect.left) * scaleX;
+    const y = (event.clientY - rect.top) * scaleY;
+
+    if (clickedPoints.length >= 2) clickedPoints = [];
+    clickedPoints.push({ x, y });
+    redrawCanvas();
+
+    if (clickedPoints.length === 2) {
+      const pixelDist = Math.hypot(clickedPoints[1].x - clickedPoints[0].x, clickedPoints[1].y - clickedPoints[0].y);
+      if (pixelsPerMetre === null) {
+        // Not yet calibrated - ask for the real length of this line
+        drawingCanvas._lastPixelDist = pixelDist;
+        document.getElementById('tk_calibrateForm').style.display = 'block';
+        document.getElementById('tk_measuredResult').style.display = 'none';
+        document.getElementById('tk_drawingStatus').textContent = 'Enter the real-world length of the line you just drew.';
+      } else {
+        const realDist = pixelDist / pixelsPerMetre;
+        lastMeasuredDistance = realDist;
+        document.getElementById('tk_measuredValue').textContent = realDist.toFixed(2);
+        document.getElementById('tk_measuredResult').style.display = 'block';
+        document.getElementById('tk_drawingStatus').textContent = 'Measured. Tap two new points to measure again, or use this value below.';
+      }
+    }
+  }
+
+  function setCalibration() {
+    const knownLength = parseFloat(document.getElementById('tk_knownLength').value);
+    if (!knownLength || knownLength <= 0) {
+      alert('Enter a valid real-world length for the line you drew.');
+      return;
+    }
+    const pixelDist = drawingCanvas._lastPixelDist;
+    pixelsPerMetre = pixelDist / knownLength;
+    document.getElementById('tk_calibrateForm').style.display = 'none';
+    document.getElementById('tk_drawingStatus').textContent = 'Scale calibrated. Tap any two points on the drawing to measure a real distance.';
+    resetDrawingPoints();
+  }
+
+  function useMeasuredDistance() {
+    if (lastMeasuredDistance === null) return;
+    document.getElementById('tk_dim1').value = lastMeasuredDistance.toFixed(2);
+    updateTakeoffPreview();
+    document.getElementById('tk_measuredResult').style.display = 'none';
+    resetDrawingPoints();
+  }
+
+  function resetDrawingPoints() {
+    clickedPoints = [];
+    document.getElementById('tk_measuredResult').style.display = 'none';
+    if (pixelsPerMetre === null) {
+      document.getElementById('tk_drawingStatus').textContent = 'Tap two points on a known dimension to calibrate.';
+    } else {
+      document.getElementById('tk_drawingStatus').textContent = 'Tap any two points on the drawing to measure a real distance.';
+    }
+    redrawCanvas();
   }
 
   // ===================== TAKEOFF =====================
