@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head
+<head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Neo QS</title>
@@ -128,6 +128,7 @@
 <div class="drawer" id="drawer">
   <div class="brand"><span class="neo">NEO</span> <span class="qs">QS</span></div>
   <div class="nav-item" data-section="projects" onclick="showSection('projects')"><span class="icon">🗂️</span> Projects</div>
+  <div class="nav-item" data-section="takeoff" onclick="showSection('takeoff')"><span class="icon">📐</span> Takeoff</div>
   <div class="nav-item active" data-section="measure" onclick="showSection('measure')"><span class="icon">📏</span> Measurement</div>
   <div class="nav-item" data-section="abstract" onclick="showSection('abstract')"><span class="icon">📋</span> Abstract</div>
   <div class="nav-item" data-section="boq" onclick="showSection('boq')"><span class="icon">📄</span> BOQ</div>
@@ -158,6 +159,59 @@
     <div class="card">
       <h3>All Projects</h3>
       <div id="proj_list"><div class="empty-state">Fetching…</div></div>
+    </div>
+  </div>
+
+  <!-- ============ TAKEOFF ============ -->
+  <div class="section" id="section-takeoff">
+    <h2 class="page-title">Takeoff</h2>
+    <div class="subtitle">Dimension paper: Timesing × Dimensions = Squaring</div>
+
+    <div class="card">
+      <h3>Add Dimension Line</h3>
+      <label>Section (e.g. Main Building)</label>
+      <input type="text" id="tk_section" placeholder="e.g. Main Building">
+      <label>Subsection (e.g. Excavation and Earthworks)</label>
+      <input type="text" id="tk_subsection" placeholder="e.g. Excavation and Earthworks">
+      <label>Description</label>
+      <input type="text" id="tk_description" placeholder="e.g. Excavate foundation trench">
+      <label>Unit</label>
+      <select id="tk_unit">
+        <option value="m3">m³ (cubic metres)</option>
+        <option value="m2">m² (square metres)</option>
+        <option value="m">m (linear metres)</option>
+        <option value="nr">nr (number/count)</option>
+        <option value="kg">kg</option>
+        <option value="item">item</option>
+      </select>
+      <label>Timesing (no. of times this occurs)</label>
+      <input type="number" step="any" id="tk_timesing" placeholder="e.g. 2" value="1" oninput="updateTakeoffPreview()">
+      <div class="row3">
+        <div><label>Dimension 1</label><input type="number" step="any" id="tk_dim1" placeholder="Length" oninput="updateTakeoffPreview()"></div>
+        <div><label>Dimension 2</label><input type="number" step="any" id="tk_dim2" placeholder="Width" oninput="updateTakeoffPreview()"></div>
+        <div><label>Dimension 3</label><input type="number" step="any" id="tk_dim3" placeholder="Height" oninput="updateTakeoffPreview()"></div>
+      </div>
+      <p class="hint" id="tk_preview">Squared quantity: —</p>
+      <button class="btn" onclick="addTakeoffItem()">Add to Dimension Sheet</button>
+      <div class="status" id="tk_addStatus"></div>
+    </div>
+
+    <div class="card">
+      <h3>Consolidate into Measurement Sheet</h3>
+      <p class="hint">Groups dimension lines by Section, Subsection, Description, and Unit, summing their squared quantities into single Measurement Sheet entries. Running again replaces takeoff-sourced measurements with a fresh set (manual and imported entries are kept).</p>
+      <button class="btn" onclick="consolidateTakeoff()">Consolidate Takeoff into Measurement Sheet</button>
+      <div class="status" id="tk_consolidateStatus"></div>
+    </div>
+
+    <div class="card">
+      <h3>Dimension Sheet</h3>
+      <button class="btn danger" onclick="clearAllTakeoff(this)">Clear All Takeoff</button>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Description</th><th>Timesing</th><th>Dimensions</th><th>Unit</th><th>Squared</th><th></th></tr></thead>
+          <tbody id="tk_body"><tr><td colspan="6" class="empty-state">Fetching…</td></tr></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -381,7 +435,8 @@
 
   function refreshSection(name) {
     if (!currentProjectId) return;
-    if (name === 'measure') loadMeasurementItems();
+    if (name === 'takeoff') loadTakeoffItems();
+    else if (name === 'measure') loadMeasurementItems();
     else if (name === 'abstract') loadAbstract();
     else if (name === 'boq') loadBOQ();
     else if (name === 'cost') loadCostData();
@@ -799,6 +854,151 @@
     }
   }
 
+  // ===================== TAKEOFF =====================
+  function calcSquaring(timesing, d1, d2, d3) {
+    const t = parseFloat(timesing) || 1;
+    const dims = [d1, d2, d3].map(d => parseFloat(d)).filter(d => !isNaN(d) && d > 0);
+    if (dims.length === 0) return null;
+    const product = dims.reduce((a, b) => a * b, 1);
+    return t * product;
+  }
+
+  function updateTakeoffPreview() {
+    const timesing = document.getElementById('tk_timesing').value;
+    const d1 = document.getElementById('tk_dim1').value;
+    const d2 = document.getElementById('tk_dim2').value;
+    const d3 = document.getElementById('tk_dim3').value;
+    const result = calcSquaring(timesing, d1, d2, d3);
+    document.getElementById('tk_preview').textContent = 'Squared quantity: ' + (result !== null ? result.toFixed(2) : '—');
+  }
+
+  async function loadTakeoffItems() {
+    if (!currentProjectId) return;
+    const tbody = document.getElementById('tk_body');
+    try {
+      const data = await supaGet(`takeoff_items?select=*&project_id=eq.${currentProjectId}&order=created_at.desc`);
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No dimension lines yet — add one above.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(item => {
+        const dims = [item.dim1, item.dim2, item.dim3].filter(d => d !== null && d !== undefined).map(d => Number(d).toFixed(2)).join(' × ');
+        return `
+        <tr>
+          <td>${escapeHtml(item.description)}</td>
+          <td class="qty">${Number(item.timesing).toFixed(0)}</td>
+          <td>${dims || '—'}</td>
+          <td>${escapeHtml(item.unit)}</td>
+          <td class="qty">${Number(item.squared_quantity).toFixed(2)}</td>
+          <td><button class="delete-btn" onclick="deleteTakeoffItem('${item.id}')">✕</button></td>
+        </tr>`;
+      }).join('');
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Error: ${e.message}</td></tr>`;
+    }
+  }
+
+  async function deleteTakeoffItem(id) {
+    try {
+      await supaDelete(`takeoff_items?id=eq.${id}`);
+      loadTakeoffItems();
+    } catch (e) {
+      alert('Delete failed: ' + e.message);
+    }
+  }
+
+  let clearTakeoffArmed = false;
+  async function clearAllTakeoff(btn) {
+    if (!currentProjectId) return;
+    if (!clearTakeoffArmed) {
+      clearTakeoffArmed = true;
+      btn.textContent = 'Tap again to confirm delete';
+      setTimeout(() => { clearTakeoffArmed = false; btn.textContent = 'Clear All Takeoff'; }, 4000);
+      return;
+    }
+    clearTakeoffArmed = false;
+    btn.textContent = 'Clear All Takeoff';
+    try {
+      await supaDelete(`takeoff_items?project_id=eq.${currentProjectId}`);
+      loadTakeoffItems();
+    } catch (e) {
+      alert('Clear failed: ' + e.message);
+    }
+  }
+
+  async function addTakeoffItem() {
+    if (!currentProjectId) { showStatus('tk_addStatus', 'error', 'Not connected yet.'); return; }
+    const section = document.getElementById('tk_section').value.trim();
+    const subsection = document.getElementById('tk_subsection').value.trim();
+    const description = document.getElementById('tk_description').value.trim();
+    const unit = document.getElementById('tk_unit').value;
+    const timesing = document.getElementById('tk_timesing').value || 1;
+    const dim1 = document.getElementById('tk_dim1').value;
+    const dim2 = document.getElementById('tk_dim2').value;
+    const dim3 = document.getElementById('tk_dim3').value;
+
+    if (!description) { showStatus('tk_addStatus', 'error', 'Description is required.'); return; }
+    const squared = calcSquaring(timesing, dim1, dim2, dim3);
+    if (squared === null) { showStatus('tk_addStatus', 'error', 'Enter at least one dimension.'); return; }
+
+    try {
+      await supaPost('takeoff_items', {
+        project_id: currentProjectId,
+        section: section || null, subsection: subsection || null,
+        description, unit, timesing: parseFloat(timesing),
+        dim1: dim1 || null, dim2: dim2 || null, dim3: dim3 || null,
+        squared_quantity: squared
+      }, false);
+      showStatus('tk_addStatus', 'success', 'Added to Dimension Sheet.');
+      ['tk_description','tk_dim1','tk_dim2','tk_dim3'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('tk_timesing').value = '1';
+      updateTakeoffPreview();
+      loadTakeoffItems();
+    } catch (e) {
+      showStatus('tk_addStatus', 'error', 'Error: ' + e.message);
+    }
+  }
+
+  async function consolidateTakeoff() {
+    if (!currentProjectId) { showStatus('tk_consolidateStatus', 'error', 'Not connected yet.'); return; }
+    try {
+      showStatus('tk_consolidateStatus', 'success', 'Working…');
+      const takeoffItems = await supaGet(`takeoff_items?select=*&project_id=eq.${currentProjectId}`);
+      if (!takeoffItems || takeoffItems.length === 0) {
+        showStatus('tk_consolidateStatus', 'error', 'No dimension lines to consolidate. Add some above first.');
+        return;
+      }
+
+      const groups = {};
+      takeoffItems.forEach(t => {
+        const key = `${t.section || ''}|${t.subsection || ''}|${t.description}|${t.unit}`;
+        if (!groups[key]) {
+          groups[key] = {
+            section: t.section || null, subsection: t.subsection || null,
+            description: t.description, unit: t.unit, total_quantity: 0
+          };
+        }
+        groups[key].total_quantity += Number(t.squared_quantity);
+      });
+
+      // Remove only previously takeoff-sourced measurements, keep manual/imported ones
+      await supaDelete(`measurement_items?project_id=eq.${currentProjectId}&source=eq.takeoff`);
+
+      const newItems = Object.values(groups).map(g => ({
+        project_id: currentProjectId,
+        section: g.section, subsection: g.subsection,
+        description: g.description, unit: g.unit,
+        quantity: g.total_quantity, source: 'takeoff'
+      }));
+      await supaPost('measurement_items', newItems, false);
+
+      showStatus('tk_consolidateStatus', 'success', `Consolidated into ${newItems.length} measurement line(s).`);
+      loadMeasurementItems();
+    } catch (e) {
+      showStatus('tk_consolidateStatus', 'error', 'Error: ' + e.message);
+    }
+  }
+
   // ===================== MEASURE =====================
   function calcQuantity(unit, length, width, height) {
     const l = parseFloat(length), w = parseFloat(width), h = parseFloat(height);
@@ -822,7 +1022,7 @@
           <td>${escapeHtml(item.description)}</td>
           <td>${escapeHtml(item.unit)}</td>
           <td class="qty">${Number(item.quantity).toFixed(2)}</td>
-          <td><span class="tag ${item.source === 'planswift_import' ? 'import' : ''}">${item.source === 'planswift_import' ? 'PlanSwift' : 'Manual'}</span></td>
+          <td><span class="tag ${item.source === 'planswift_import' ? 'import' : ''}">${item.source === 'planswift_import' ? 'PlanSwift' : (item.source === 'takeoff' ? 'Takeoff' : 'Manual')}</span></td>
           <td><button class="delete-btn" onclick="deleteMeasurementItem('${item.id}')">✕</button></td>
         </tr>`).join('');
     } catch (e) {
@@ -1541,6 +1741,7 @@
     await ensureProject();
     await updateTopbarProjectName();
     await loadProjectTitle();
+    await loadTakeoffItems();
     await loadMeasurementItems();
     await loadAbstract();
     await loadBOQ();
