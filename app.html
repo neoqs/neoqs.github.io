@@ -208,7 +208,7 @@
       <button class="btn danger" onclick="clearAllTakeoff(this)">Clear All Takeoff</button>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>Description</th><th>Timesing</th><th>Dimensions</th><th>Unit</th><th>Squared</th><th></th></tr></thead>
+          <thead><tr><th>Timesing</th><th>Dimensions</th><th>Squaring</th><th>Unit</th><th>Description</th><th></th></tr></thead>
           <tbody id="tk_body"><tr><td colspan="6" class="empty-state">Fetching…</td></tr></tbody>
         </table>
       </div>
@@ -882,14 +882,17 @@
         return;
       }
       tbody.innerHTML = data.map(item => {
-        const dims = [item.dim1, item.dim2, item.dim3].filter(d => d !== null && d !== undefined).map(d => Number(d).toFixed(2)).join(' × ');
+        const dims = [item.dim1, item.dim2, item.dim3]
+          .filter(d => d !== null && d !== undefined)
+          .map(d => Number(d).toFixed(2))
+          .join('<br>');
         return `
         <tr>
-          <td>${escapeHtml(item.description)}</td>
-          <td class="qty">${Number(item.timesing).toFixed(0)}</td>
-          <td>${dims || '—'}</td>
-          <td>${escapeHtml(item.unit)}</td>
+          <td class="qty">${Number(item.timesing).toFixed(0)}/</td>
+          <td style="line-height:1.6;">${dims || '—'}</td>
           <td class="qty">${Number(item.squared_quantity).toFixed(2)}</td>
+          <td>${escapeHtml(item.unit)}</td>
+          <td>${escapeHtml(item.description)}</td>
           <td><button class="delete-btn" onclick="deleteTakeoffItem('${item.id}')">✕</button></td>
         </tr>`;
       }).join('');
