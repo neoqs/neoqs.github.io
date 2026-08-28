@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Neo QS</title>
+<script>window.OCR_SCRIPT_FAILED = false;</script>
+<script src="https://unpkg.com/tesseract.js@4/dist/tesseract.min.js" onerror="window.OCR_SCRIPT_FAILED = true;"></script>
 <style>
   * { box-sizing: border-box; }
   body { font-family: -apple-system, sans-serif; background: #0d1117; color: #e6edf3; margin: 0; padding: 0; }
@@ -172,6 +174,12 @@
       <p class="hint" id="tk_drawingHint">Upload a drawing image (JPG/PNG), then tap two points on a known dimension to calibrate scale. After that, tap any two points to measure real distances.</p>
       <input type="file" id="tk_drawingFile" accept="image/*" onchange="loadDrawingImage(event)">
       <div id="tk_canvasWrap" style="display:none; margin-top:12px;">
+        <button class="btn secondary" onclick="runOCR()">Scan for Printed Dimensions</button>
+        <div class="status" id="tk_ocrStatus"></div>
+        <div id="tk_ocrResults" style="display:none; margin-bottom:12px;">
+          <p class="hint">Tap a detected number to use it as Dimension 1 (assumed millimetres, converted to metres). Check each one against the drawing before trusting it — OCR can misread digits.</p>
+          <div id="tk_ocrChips" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+        </div>
         <div style="display:flex; gap:8px; margin-bottom:8px;">
           <button class="btn secondary" style="margin-top:0;" onclick="zoomDrawing(-25)">− Zoom Out</button>
           <div style="flex:1; text-align:center; padding:10px; color:#8b949e; font-size:13px;" id="tk_zoomLabel">100%</div>
@@ -890,6 +898,39 @@
   let pixelsPerMetre = null; // set once calibrated
   let lastMeasuredDistance = null;
   let zoomPercent = 100;
+
+  async function runOCR() {
+    if (!drawingImage) { showStatus('tk_ocrStatus', 'error', 'Upload a drawing first.'); return; }
+    if (window.OCR_SCRIPT_FAILED || typeof Tesseract === 'undefined') {
+      showStatus('tk_ocrStatus', 'error', 'OCR library failed to load. Use the click-to-measure tool below instead.');
+      return;
+    }
+    showStatus('tk_ocrStatus', 'success', 'Scanning drawing for printed numbers… this can take 10-30 seconds.');
+    document.getElementById('tk_ocrResults').style.display = 'none';
+    try {
+      const result = await Tesseract.recognize(drawingImage.src, 'eng');
+      const words = (result.data.words || []).filter(w => /^\d{2,6}(\.\d+)?$/.test(w.text.trim()));
+      if (words.length === 0) {
+        showStatus('tk_ocrStatus', 'error', 'No printed dimension numbers detected. Use the click-to-measure tool below instead.');
+        return;
+      }
+      const chipsEl = document.getElementById('tk_ocrChips');
+      chipsEl.innerHTML = words.map(w => {
+        const val = parseFloat(w.text.trim());
+        return `<button class="btn secondary" style="width:auto; margin:0; padding:8px 12px;" onclick="useOCRValue(${val})">${w.text.trim()} mm</button>`;
+      }).join('');
+      document.getElementById('tk_ocrResults').style.display = 'block';
+      showStatus('tk_ocrStatus', 'success', `Found ${words.length} possible dimension(s). Tap one to use it, or check it against the drawing first.`);
+    } catch (e) {
+      showStatus('tk_ocrStatus', 'error', 'OCR failed: ' + e.message + '. Use the click-to-measure tool below instead.');
+    }
+  }
+
+  function useOCRValue(mmValue) {
+    const metres = mmValue / 1000;
+    document.getElementById('tk_dim1').value = metres.toFixed(2);
+    updateTakeoffPreview();
+  }
 
   function loadDrawingImage(event) {
     const file = event.target.files[0];
