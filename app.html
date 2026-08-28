@@ -172,7 +172,15 @@
       <p class="hint" id="tk_drawingHint">Upload a drawing image (JPG/PNG), then tap two points on a known dimension to calibrate scale. After that, tap any two points to measure real distances.</p>
       <input type="file" id="tk_drawingFile" accept="image/*" onchange="loadDrawingImage(event)">
       <div id="tk_canvasWrap" style="display:none; margin-top:12px;">
-        <canvas id="tk_canvas" style="width:100%; border:1px solid #30363d; border-radius:6px; touch-action:none;"></canvas>
+        <div style="display:flex; gap:8px; margin-bottom:8px;">
+          <button class="btn secondary" style="margin-top:0;" onclick="zoomDrawing(-25)">− Zoom Out</button>
+          <div style="flex:1; text-align:center; padding:10px; color:#8b949e; font-size:13px;" id="tk_zoomLabel">100%</div>
+          <button class="btn secondary" style="margin-top:0;" onclick="zoomDrawing(25)">+ Zoom In</button>
+        </div>
+        <p class="hint">Zoom in until the point you need to tap is large and clear, then scroll to it and tap precisely. This matters — a few pixels off at low zoom can mean real centimetres of error.</p>
+        <div id="tk_scrollWrap" style="overflow:auto; max-height:60vh; border:1px solid #30363d; border-radius:6px;">
+          <canvas id="tk_canvas" style="display:block; touch-action:manipulation;"></canvas>
+        </div>
         <div class="status" id="tk_drawingStatus" style="display:block; margin-top:8px;">Tap two points on a known dimension to calibrate.</div>
         <div id="tk_calibrateForm" style="display:none; margin-top:10px;">
           <label>Real-world length of that line (metres)</label>
@@ -881,6 +889,7 @@
   let clickedPoints = [];
   let pixelsPerMetre = null; // set once calibrated
   let lastMeasuredDistance = null;
+  let zoomPercent = 100;
 
   function loadDrawingImage(event) {
     const file = event.target.files[0];
@@ -889,19 +898,33 @@
     img.onload = function() {
       drawingImage = img;
       const canvas = document.getElementById('tk_canvas');
-      // Cap canvas resolution so huge photos stay responsive; scale display via CSS
-      const maxWidth = 1000;
-      const scale = img.width > maxWidth ? maxWidth / img.width : 1;
-      canvas.width = img.width * scale;
-      canvas.height = img.height * scale;
+      // Keep the canvas pixel buffer at full native resolution so zooming
+      // in reveals real detail instead of blur. Display size is controlled
+      // separately via CSS width, adjustable with the zoom buttons.
+      canvas.width = img.width;
+      canvas.height = img.height;
       drawingCanvas = canvas;
       drawingCtx = canvas.getContext('2d');
       document.getElementById('tk_canvasWrap').style.display = 'block';
+      zoomPercent = 100;
+      applyZoomDisplay();
       resetDrawingPoints();
       redrawCanvas();
       canvas.onclick = handleCanvasClick;
     };
     img.src = URL.createObjectURL(file);
+  }
+
+  function applyZoomDisplay() {
+    if (!drawingCanvas) return;
+    drawingCanvas.style.width = (drawingCanvas.width * zoomPercent / 100) + 'px';
+    drawingCanvas.style.height = 'auto';
+    document.getElementById('tk_zoomLabel').textContent = zoomPercent + '%';
+  }
+
+  function zoomDrawing(deltaPercent) {
+    zoomPercent = Math.max(25, Math.min(400, zoomPercent + deltaPercent));
+    applyZoomDisplay();
   }
 
   function redrawCanvas() {
