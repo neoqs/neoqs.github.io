@@ -764,16 +764,49 @@
     location.reload();
   }
 
+  // Proper CSV line parser: handles quoted fields (so descriptions containing
+  // commas, e.g. "Supply, deliver and lay concrete", don't corrupt column
+  // alignment) and "" as an escaped quote inside a quoted field.
+  function parseCSVLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (inQuotes) {
+        if (char === '"') {
+          if (line[i + 1] === '"') { current += '"'; i++; }
+          else { inQuotes = false; }
+        } else {
+          current += char;
+        }
+      } else {
+        if (char === '"') { inQuotes = true; }
+        else if (char === ',') { result.push(current); current = ''; }
+        else { current += char; }
+      }
+    }
+    result.push(current);
+    return result;
+  }
+
   function parseCSV(text) {
     const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
     if (lines.length < 2) return [];
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
     return lines.slice(1).map(line => {
-      const vals = line.split(',');
+      const vals = parseCSVLine(line);
       const row = {};
       headers.forEach((h, idx) => row[h] = (vals[idx] || '').trim());
       return row;
     });
+  }
+
+  // Strips thousand-separator commas before parsing, so "1,200.50" from an
+  // Excel export reads as 1200.5 instead of silently truncating to 1.
+  function parseNumberSafe(val) {
+    if (val === null || val === undefined) return NaN;
+    return parseFloat(String(val).replace(/,/g, ''));
   }
 
   function getSavedProjectId() {
@@ -1025,6 +1058,10 @@
       return;
     }
     const pixelDist = drawingCanvas._lastPixelDist;
+    if (!pixelDist || pixelDist < 5) {
+      alert('Those two points are too close together to calibrate accurately. Zoom in and tap two clearly separated points on a known dimension.');
+      return;
+    }
     pixelsPerMetre = pixelDist / knownLength;
     document.getElementById('tk_calibrateForm').style.display = 'none';
     document.getElementById('tk_drawingStatus').textContent = 'Scale calibrated. Tap any two points on the drawing to measure a real distance.';
@@ -1303,7 +1340,7 @@
       description: r.description || r.item || 'Imported item',
       nrm2_category: r.category || r.nrm2_category || null,
       unit: r.unit || 'item',
-      quantity: parseFloat(r.quantity || r.qty || 0),
+      quantity: parseNumberSafe(r.quantity || r.qty || 0),
       source: 'planswift_import'
     })).filter(i => i.quantity > 0);
     if (items.length === 0) { showStatus('m_importStatus', 'error', 'No valid quantity data found.'); return; }
@@ -1666,8 +1703,13 @@
     if (!quantity || isNaN(parseFloat(quantity))) { showStatus('boq_manualStatus', 'error', 'Enter a valid quantity.'); return; }
     try {
       if (!item_code) {
-        // Auto-assign the next letter within this section/subsection
-        let query = `boq_items?select=item_code&project_id=eq.${currentProjectId}&section=eq.${encodeURIComponent(section || 'General')}`;
+        // Auto-assign the next letter within this section/subsection.
+        // Must match null the same way subsection already does below -
+        // querying for the literal string 'General' would never match
+        // real unset (null) rows, silently resetting every ungrouped
+        // item back to letter "A".
+        let query = `boq_items?select=item_code&project_id=eq.${currentProjectId}`;
+        query += section ? `&section=eq.${encodeURIComponent(section)}` : `&section=is.null`;
         query += subsection ? `&subsection=eq.${encodeURIComponent(subsection)}` : `&subsection=is.null`;
         const existing = await supaGet(query);
         const nextIndex = (existing || []).length;
@@ -1700,7 +1742,7 @@
       item_code: r.item_code || r.code || null,
       description: r.description || 'Imported item',
       unit: r.unit || 'item',
-      quantity: parseFloat(r.quantity || r.qty || 0)
+      quantity: parseNumberSafe(r.quantity || r.qty || 0)
     })).filter(i => i.quantity > 0 && i.description !== 'Imported item');
     if (items.length === 0) { showStatus('boq_importStatus', 'error', 'No valid rows found.'); return; }
     try {
