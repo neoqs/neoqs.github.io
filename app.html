@@ -6,6 +6,8 @@
 <title>Neo QS</title>
 <script>window.OCR_SCRIPT_FAILED = false;</script>
 <script src="https://unpkg.com/tesseract.js@4/dist/tesseract.min.js" onerror="window.OCR_SCRIPT_FAILED = true;"></script>
+<script>window.PDF_SCRIPT_FAILED = false;</script>
+<script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js" onerror="window.PDF_SCRIPT_FAILED = true;"></script>
 <style>
   * { box-sizing: border-box; }
   body { font-family: -apple-system, sans-serif; background: #0d1117; color: #e6edf3; margin: 0; padding: 0; }
@@ -171,8 +173,14 @@
 
     <div class="card">
       <h3>Measure from Drawing</h3>
-      <p class="hint" id="tk_drawingHint">Upload a drawing image (JPG/PNG), then tap two points on a known dimension to calibrate scale. After that, tap any two points to measure real distances.</p>
-      <input type="file" id="tk_drawingFile" accept="image/*" onchange="loadDrawingImage(event)">
+      <p class="hint" id="tk_drawingHint">Upload a drawing as an image (JPG/PNG) or a full PDF drawing set. Then tap two points on a known dimension to calibrate scale, or scan for printed numbers.</p>
+      <input type="file" id="tk_drawingFile" accept="image/*,application/pdf" onchange="loadDrawingFile(event)">
+      <div class="status" id="tk_pdfLoadStatus"></div>
+      <div id="tk_pageNav" style="display:none; align-items:center; gap:8px; margin-top:10px;">
+        <button class="btn secondary" style="margin-top:0; width:auto; padding:8px 14px;" onclick="goToPage(-1)">‹ Prev</button>
+        <div style="flex:1; text-align:center; color:#8b949e; font-size:13px;" id="tk_pageLabel">Page 1 of 1</div>
+        <button class="btn secondary" style="margin-top:0; width:auto; padding:8px 14px;" onclick="goToPage(1)">Next ›</button>
+      </div>
       <div id="tk_canvasWrap" style="display:none; margin-top:12px;">
         <button class="btn secondary" onclick="runOCR()">Scan for Printed Dimensions</button>
         <div class="status" id="tk_ocrStatus"></div>
@@ -965,9 +973,24 @@
     updateTakeoffPreview();
   }
 
-  function loadDrawingImage(event) {
+  // ===================== TAKEOFF: PDF SUPPORT =====================
+  let pdfDoc = null;
+  let pdfCurrentPage = 1;
+  let pdfTotalPages = 1;
+
+  function loadDrawingFile(event) {
     const file = event.target.files[0];
     if (!file) return;
+    if (file.type === 'application/pdf') {
+      loadDrawingPDF(file);
+    } else {
+      pdfDoc = null;
+      document.getElementById('tk_pageNav').style.display = 'none';
+      loadImageFromSource(URL.createObjectURL(file));
+    }
+  }
+
+  function loadImageFromSource(src) {
     const img = new Image();
     img.onload = function() {
       drawingImage = img;
@@ -986,8 +1009,56 @@
       redrawCanvas();
       canvas.onclick = handleCanvasClick;
     };
-    img.src = URL.createObjectURL(file);
+    img.src = src;
   }
+
+  async function loadDrawingPDF(file) {
+    if (window.PDF_SCRIPT_FAILED || typeof pdfjsLib === 'undefined') {
+      showStatus('tk_pdfLoadStatus', 'error', 'PDF library failed to load. Try uploading the drawing as a JPG/PNG image instead.');
+      return;
+    }
+    showStatus('tk_pdfLoadStatus', 'success', 'Loading PDF…');
+    try {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+      const arrayBuffer = await file.arrayBuffer();
+      pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      pdfTotalPages = pdfDoc.numPages;
+      pdfCurrentPage = 1;
+      document.getElementById('tk_pageNav').style.display = 'flex';
+      showStatus('tk_pdfLoadStatus', 'success', `Loaded PDF with ${pdfTotalPages} page(s).`);
+      await renderPDFPage(pdfCurrentPage);
+    } catch (e) {
+      showStatus('tk_pdfLoadStatus', 'error', 'Could not read PDF: ' + e.message + '. Try uploading it as a JPG/PNG image instead.');
+    }
+  }
+
+  async function renderPDFPage(pageNum) {
+    const page = await pdfDoc.getPage(pageNum);
+    // Render at a higher internal scale so zooming later reveals real detail
+    const viewport = page.getViewport({ scale: 2.5 });
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = viewport.width;
+    tempCanvas.height = viewport.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    await page.render({ canvasContext: tempCtx, viewport: viewport }).promise;
+    document.getElementById('tk_pageLabel').textContent = `Page ${pageNum} of ${pdfTotalPages}`;
+    loadImageFromSource(tempCanvas.toDataURL());
+  }
+
+  function goToPage(delta) {
+    if (!pdfDoc) return;
+    const newPage = pdfCurrentPage + delta;
+    if (newPage < 1 || newPage > pdfTotalPages) return;
+    pdfCurrentPage = newPage;
+    // A new page means any existing scale calibration and detected points
+    // no longer apply to what's on screen - reset both to avoid silently
+    // measuring the new page against the old page's scale.
+    pixelsPerMetre = null;
+    document.getElementById('tk_ocrResults').style.display = 'none';
+    renderPDFPage(pdfCurrentPage);
+  }
+
+
 
   function applyZoomDisplay() {
     if (!drawingCanvas) return;
