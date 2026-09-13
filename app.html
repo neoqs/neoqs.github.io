@@ -188,6 +188,15 @@
           <p class="hint">Tap a detected number to use it as Dimension 1 (assumed millimetres, converted to metres). Check each one against the drawing before trusting it — OCR can misread digits.</p>
           <div id="tk_ocrChips" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
         </div>
+        <button class="btn secondary" id="tk_countModeBtn" onclick="toggleCountMode()">Start Counting (e.g. doors, windows)</button>
+        <div id="tk_countPanel" style="display:none; margin-top:10px; background:#0d2818; border:1px solid #2ea043; border-radius:8px; padding:12px;">
+          <p class="hint" style="margin:0 0 8px 0;">Tap each occurrence on the drawing — a numbered marker appears at every tap. Undo removes the last one.</p>
+          <div style="font-size:22px; font-weight:700; color:#7ee787; margin-bottom:8px;">Count: <span id="tk_countValue">0</span></div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn secondary" style="margin-top:0;" onclick="undoCountTap()">Undo Last</button>
+            <button class="btn" style="margin-top:0;" onclick="finishCounting()">Use This Count</button>
+          </div>
+        </div>
         <div style="display:flex; gap:8px; margin-bottom:8px;">
           <button class="btn secondary" style="margin-top:0;" onclick="zoomDrawing(-25)">− Zoom Out</button>
           <div style="flex:1; text-align:center; padding:10px; color:#8b949e; font-size:13px;" id="tk_zoomLabel">100%</div>
@@ -220,7 +229,7 @@
       <label>Description</label>
       <input type="text" id="tk_description" placeholder="e.g. Excavate foundation trench">
       <label>Unit</label>
-      <select id="tk_unit">
+      <select id="tk_unit" onchange="updateTakeoffPreview()">
         <option value="m3">m³ (cubic metres)</option>
         <option value="m2">m² (square metres)</option>
         <option value="m">m (linear metres)</option>
@@ -1050,10 +1059,14 @@
     const newPage = pdfCurrentPage + delta;
     if (newPage < 1 || newPage > pdfTotalPages) return;
     pdfCurrentPage = newPage;
-    // A new page means any existing scale calibration and detected points
-    // no longer apply to what's on screen - reset both to avoid silently
-    // measuring the new page against the old page's scale.
+    // A new page means any existing scale calibration, detected points, and
+    // in-progress count no longer apply to what's on screen - reset all of
+    // them to avoid silently mixing measurements from different pages.
     pixelsPerMetre = null;
+    countModeActive = false;
+    countPoints = [];
+    document.getElementById('tk_countPanel').style.display = 'none';
+    document.getElementById('tk_countModeBtn').textContent = 'Start Counting (e.g. doors, windows)';
     document.getElementById('tk_ocrResults').style.display = 'none';
     renderPDFPage(pdfCurrentPage);
   }
@@ -1076,6 +1089,22 @@
     if (!drawingCtx || !drawingImage) return;
     drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
     drawingCtx.drawImage(drawingImage, 0, 0, drawingCanvas.width, drawingCanvas.height);
+
+    if (countModeActive) {
+      countPoints.forEach((p, idx) => {
+        drawingCtx.beginPath();
+        drawingCtx.arc(p.x, p.y, 14, 0, 2 * Math.PI);
+        drawingCtx.fillStyle = '#e05252';
+        drawingCtx.fill();
+        drawingCtx.fillStyle = '#fff';
+        drawingCtx.font = 'bold 16px sans-serif';
+        drawingCtx.textAlign = 'center';
+        drawingCtx.textBaseline = 'middle';
+        drawingCtx.fillText(String(idx + 1), p.x, p.y);
+      });
+      return;
+    }
+
     clickedPoints.forEach(p => {
       drawingCtx.beginPath();
       drawingCtx.arc(p.x, p.y, 6, 0, 2 * Math.PI);
@@ -1092,6 +1121,51 @@
     }
   }
 
+  let countModeActive = false;
+  let countPoints = [];
+
+  function toggleCountMode() {
+    countModeActive = !countModeActive;
+    const panel = document.getElementById('tk_countPanel');
+    const btn = document.getElementById('tk_countModeBtn');
+    if (countModeActive) {
+      countPoints = [];
+      updateCountDisplay();
+      panel.style.display = 'block';
+      btn.textContent = 'Stop Counting';
+      document.getElementById('tk_drawingStatus').textContent = 'Counting mode: tap each occurrence on the drawing.';
+    } else {
+      panel.style.display = 'none';
+      btn.textContent = 'Start Counting (e.g. doors, windows)';
+      resetDrawingPoints();
+    }
+    redrawCanvas();
+  }
+
+  function updateCountDisplay() {
+    document.getElementById('tk_countValue').textContent = countPoints.length;
+  }
+
+  function undoCountTap() {
+    countPoints.pop();
+    updateCountDisplay();
+    redrawCanvas();
+  }
+
+  function finishCounting() {
+    if (countPoints.length === 0) {
+      alert('Tap at least one occurrence before using this count.');
+      return;
+    }
+    document.getElementById('tk_timesing').value = countPoints.length;
+    document.getElementById('tk_unit').value = 'nr';
+    document.getElementById('tk_dim1').value = '';
+    document.getElementById('tk_dim2').value = '';
+    document.getElementById('tk_dim3').value = '';
+    updateTakeoffPreview();
+    toggleCountMode();
+  }
+
   function handleCanvasClick(event) {
     const rect = drawingCanvas.getBoundingClientRect();
     // Account for CSS scaling (canvas display width may differ from actual pixel width)
@@ -1099,6 +1173,13 @@
     const scaleY = drawingCanvas.height / rect.height;
     const x = (event.clientX - rect.left) * scaleX;
     const y = (event.clientY - rect.top) * scaleY;
+
+    if (countModeActive) {
+      countPoints.push({ x, y });
+      updateCountDisplay();
+      redrawCanvas();
+      return;
+    }
 
     if (clickedPoints.length >= 2) clickedPoints = [];
     clickedPoints.push({ x, y });
@@ -1159,10 +1240,15 @@
   }
 
   // ===================== TAKEOFF =====================
-  function calcSquaring(timesing, d1, d2, d3) {
+  function calcSquaring(timesing, d1, d2, d3, unit) {
     const t = parseFloat(timesing) || 1;
     const dims = [d1, d2, d3].map(d => parseFloat(d)).filter(d => !isNaN(d) && d > 0);
-    if (dims.length === 0) return null;
+    if (dims.length === 0) {
+      // A pure count (e.g. "5 no. doors") has no dimensions at all -
+      // the squared quantity is just the count itself.
+      if (unit === 'nr' || unit === 'item') return t;
+      return null;
+    }
     const product = dims.reduce((a, b) => a * b, 1);
     return t * product;
   }
@@ -1172,7 +1258,8 @@
     const d1 = document.getElementById('tk_dim1').value;
     const d2 = document.getElementById('tk_dim2').value;
     const d3 = document.getElementById('tk_dim3').value;
-    const result = calcSquaring(timesing, d1, d2, d3);
+    const unit = document.getElementById('tk_unit').value;
+    const result = calcSquaring(timesing, d1, d2, d3, unit);
     document.getElementById('tk_preview').textContent = 'Squared quantity: ' + (result !== null ? result.toFixed(2) : '—');
   }
 
@@ -1245,8 +1332,8 @@
     const dim3 = document.getElementById('tk_dim3').value;
 
     if (!description) { showStatus('tk_addStatus', 'error', 'Description is required.'); return; }
-    const squared = calcSquaring(timesing, dim1, dim2, dim3);
-    if (squared === null) { showStatus('tk_addStatus', 'error', 'Enter at least one dimension.'); return; }
+    const squared = calcSquaring(timesing, dim1, dim2, dim3, unit);
+    if (squared === null) { showStatus('tk_addStatus', 'error', 'Enter at least one dimension, or switch Unit to "nr" for a pure count.'); return; }
 
     try {
       await supaPost('takeoff_items', {
