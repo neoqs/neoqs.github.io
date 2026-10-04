@@ -305,7 +305,7 @@
 
     <div class="card">
       <h3>PlanSwift CSV Import</h3>
-      <label>Upload PlanSwift export (.csv)</label>
+      <p class="hint">Export from PlanSwift as .csv (Reports → Export to CSV — no need to go through Excel first). Recognizes common column names (Description/Item, Quantity/Count/Area/Length, Unit/UOM) and automatically converts feet/inches to metres if your PlanSwift install uses imperial units.</p>
       <input type="file" id="m_csvFile" accept=".csv" style="margin-top:10px;">
       <button class="btn secondary" onclick="importMeasureCSV()">Import to Measurement Sheet</button>
       <div class="status" id="m_importStatus"></div>
@@ -1484,6 +1484,30 @@
     }
   }
 
+  // PlanSwift exports vary in both column naming and measurement units
+  // depending on the install's settings. This converts common imperial
+  // units to the metric ones Neo QS works in throughout, so a US-style
+  // PlanSwift export doesn't silently produce wrong quantities.
+  function normalizeUnit(rawUnit, rawQuantity) {
+    const u = (rawUnit || '').toString().trim().toLowerCase();
+    const qty = parseNumberSafe(rawQuantity);
+    if (isNaN(qty)) return { unit: rawUnit || 'item', quantity: NaN };
+
+    const imperialLinear = ['ft', 'feet', 'foot', 'lf', "'"];
+    const imperialArea = ['sf', 'sqft', 'ft2', 'sq ft', 'square feet'];
+    const imperialVolume = ['cf', 'cuft', 'ft3', 'cu ft', 'cubic feet'];
+    const imperialInches = ['in', 'inch', 'inches', '"'];
+
+    if (imperialLinear.includes(u)) return { unit: 'm', quantity: qty * 0.3048 };
+    if (imperialArea.includes(u)) return { unit: 'm2', quantity: qty * 0.092903 };
+    if (imperialVolume.includes(u)) return { unit: 'm3', quantity: qty * 0.0283168 };
+    if (imperialInches.includes(u)) return { unit: 'm', quantity: qty * 0.0254 };
+
+    const metricMap = { 'sqm': 'm2', 'sq.m': 'm2', 'm²': 'm2', 'cbm': 'm3', 'cu.m': 'm3', 'm³': 'm3', 'no': 'nr', 'no.': 'nr', 'number': 'nr', 'each': 'nr', 'pcs': 'nr' };
+    const finalUnit = metricMap[u] || (rawUnit || 'item');
+    return { unit: finalUnit, quantity: qty };
+  }
+
   async function importMeasureCSV() {
     if (!currentProjectId) { showStatus('m_importStatus', 'error', 'Not connected yet.'); return; }
     const fileInput = document.getElementById('m_csvFile');
@@ -1491,18 +1515,24 @@
     const text = await fileInput.files[0].text();
     const rows = parseCSV(text);
     if (rows.length === 0) { showStatus('m_importStatus', 'error', 'No rows found.'); return; }
-    const items = rows.map(r => ({
-      project_id: currentProjectId,
-      section: r.section || null,
-      subsection: r.subsection || null,
-      description: r.description || r.item || 'Imported item',
-      nrm2_category: r.category || r.nrm2_category || null,
-      unit: r.unit || 'item',
-      quantity: parseNumberSafe(r.quantity || r.qty || 0),
-      source: 'planswift_import'
-    })).filter(i => i.quantity > 0);
-    if (items.length === 0) { showStatus('m_importStatus', 'error', 'No valid quantity data found.'); return; }
+    const items = rows.map(r => {
+      const rawUnit = r.unit || r.uom || r['unit of measure'] || r['takeoff type'] || 'item';
+      const rawQty = r.quantity || r.qty || r.count || r.area || r.length || r.perimeter || r.volume || 0;
+      const normalized = normalizeUnit(rawUnit, rawQty);
+      return {
+        project_id: currentProjectId,
+        section: r.section || r.page || null,
+        subsection: r.subsection || null,
+        description: r.description || r.item || r['item name'] || 'Imported item',
+        nrm2_category: r.category || r.nrm2_category || null,
+        unit: normalized.unit,
+        quantity: normalized.quantity,
+        source: 'planswift_import'
+      };
+    }).filter(i => !isNaN(i.quantity) && i.quantity > 0);
+    if (items.length === 0) { showStatus('m_importStatus', 'error', 'No valid quantity data found. Check that your CSV has recognizable Description and Quantity columns.'); return; }
     try {
+
       await supaPost('measurement_items', items, false);
       showStatus('m_importStatus', 'success', `Imported ${items.length} item(s).`);
       fileInput.value = '';
