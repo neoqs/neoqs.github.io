@@ -1795,6 +1795,53 @@
     }
   }
 
+  let editingBOQItemId = null;
+
+  function boqRowHtml(item, rate, amount, isEditing) {
+    if (!isEditing) {
+      return `
+        <tr>
+          <td><span class="code-tag">${escapeHtml(item.item_code || '')}</span></td>
+          <td>${escapeHtml(item.description)}</td>
+          <td>${escapeHtml(item.unit)}</td>
+          <td class="qty">${Number(item.quantity).toFixed(2)}</td>
+          <td>${rate ? formatMoney(rate) : '—'}</td>
+          <td class="qty">${amount !== null ? formatMoney(amount) : '—'}</td>
+          <td style="white-space:nowrap;">
+            <button class="delete-btn" style="background:#21262d;" onclick="startEditBOQItem('${item.id}')">✎</button>
+            <button class="delete-btn" onclick="deleteBOQItem('${item.id}')">✕</button>
+          </td>
+        </tr>`;
+    }
+    // Editable row: swaps the normally-static cells for input fields.
+    // Section/Subsection aren't editable here on purpose - moving an item
+    // between groups is a bigger structural change than a quick fix, and
+    // belongs in a dedicated "move item" action if that's ever needed.
+    return `
+      <tr style="background:#161b22;">
+        <td colspan="7" style="padding:10px;">
+          <label style="display:block;font-size:11px;color:#8b949e;margin-bottom:2px;">Item Code</label>
+          <input type="text" id="edit_code_${item.id}" value="${escapeHtml(item.item_code || '')}" style="width:100%;padding:8px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;margin-bottom:8px;">
+          <label style="display:block;font-size:11px;color:#8b949e;margin-bottom:2px;">Description</label>
+          <input type="text" id="edit_desc_${item.id}" value="${escapeHtml(item.description)}" style="width:100%;padding:8px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;margin-bottom:8px;">
+          <div style="display:flex;gap:8px;margin-bottom:8px;">
+            <div style="flex:1;">
+              <label style="display:block;font-size:11px;color:#8b949e;margin-bottom:2px;">Unit</label>
+              <input type="text" id="edit_unit_${item.id}" value="${escapeHtml(item.unit)}" style="width:100%;padding:8px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;">
+            </div>
+            <div style="flex:1;">
+              <label style="display:block;font-size:11px;color:#8b949e;margin-bottom:2px;">Quantity</label>
+              <input type="number" step="any" id="edit_qty_${item.id}" value="${item.quantity}" style="width:100%;padding:8px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;">
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn" style="margin:0;" onclick="saveEditBOQItem('${item.id}')">Save</button>
+            <button class="btn secondary" style="margin:0;" onclick="cancelEditBOQItem()">Cancel</button>
+          </div>
+        </td>
+      </tr>`;
+  }
+
   async function loadBOQ() {
     if (!currentProjectId) return;
     const container = document.getElementById('boq_hierarchy');
@@ -1823,16 +1870,7 @@
             const rate = rateMap[item.id];
             const amount = rate ? Number(item.quantity) * Number(rate) : null;
             if (amount !== null) grandTotal += amount;
-            html += `
-              <tr>
-                <td><span class="code-tag">${escapeHtml(item.item_code || '')}</span></td>
-                <td>${escapeHtml(item.description)}</td>
-                <td>${escapeHtml(item.unit)}</td>
-                <td class="qty">${Number(item.quantity).toFixed(2)}</td>
-                <td>${rate ? formatMoney(rate) : '—'}</td>
-                <td class="qty">${amount !== null ? formatMoney(amount) : '—'}</td>
-                <td><button class="delete-btn" onclick="deleteBOQItem('${item.id}')">✕</button></td>
-              </tr>`;
+            html += boqRowHtml(item, rate, amount, item.id === editingBOQItemId);
           });
           const subtotal = computeSubtotal(items, rateMap);
           if (sub) {
@@ -1846,6 +1884,35 @@
       container.innerHTML = html;
     } catch (e) {
       container.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+    }
+  }
+
+  function startEditBOQItem(id) {
+    editingBOQItemId = id;
+    loadBOQ();
+  }
+
+  function cancelEditBOQItem() {
+    editingBOQItemId = null;
+    loadBOQ();
+  }
+
+  async function saveEditBOQItem(id) {
+    const item_code = document.getElementById(`edit_code_${id}`).value.trim();
+    const description = document.getElementById(`edit_desc_${id}`).value.trim();
+    const unit = document.getElementById(`edit_unit_${id}`).value.trim();
+    const quantity = parseFloat(document.getElementById(`edit_qty_${id}`).value);
+
+    if (!description) { alert('Description is required.'); return; }
+    if (!unit) { alert('Unit is required.'); return; }
+    if (isNaN(quantity) || quantity <= 0) { alert('Enter a valid quantity.'); return; }
+
+    try {
+      await supaPatch(`boq_items?id=eq.${id}`, { item_code: item_code || null, description, unit, quantity });
+      editingBOQItemId = null;
+      loadBOQ();
+    } catch (e) {
+      alert('Save failed: ' + e.message);
     }
   }
 
