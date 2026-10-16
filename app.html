@@ -1845,6 +1845,11 @@
   async function loadBOQ() {
     if (!currentProjectId) return;
     const container = document.getElementById('boq_hierarchy');
+    // Rebuilding the list below replaces its whole contents, which resets
+    // scroll position by default - save it here and restore it after, so
+    // tapping Edit/Save/Cancel on a row partway down the list doesn't
+    // jump the page back to the top.
+    const scrollY = window.scrollY;
     try {
       const data = await supaGet(`boq_items?select=*&project_id=eq.${currentProjectId}&order=section.asc,subsection.asc,item_code.asc`);
       if (!data || data.length === 0) {
@@ -1882,8 +1887,10 @@
 
       html += `<div class="total-card" style="margin-top:20px;"><div class="label">TOTAL PROJECT COST</div><div class="value">${formatMoney(grandTotal)}</div></div>`;
       container.innerHTML = html;
+      requestAnimationFrame(() => window.scrollTo(0, scrollY));
     } catch (e) {
       container.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+      requestAnimationFrame(() => window.scrollTo(0, scrollY));
     }
   }
 
