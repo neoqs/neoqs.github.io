@@ -1811,7 +1811,7 @@
         <td><input type="text" value="${escapeHtml(item.description)}" style="${cellStyle} min-width:160px;" onblur="saveBOQCell('${item.id}','description',this.value,this)"></td>
         <td><input type="text" value="${escapeHtml(item.unit)}" style="${cellStyle} width:60px;" onblur="saveBOQCell('${item.id}','unit',this.value,this)"></td>
         <td><input type="number" step="any" value="${item.quantity}" style="${cellStyle} width:80px;" onblur="saveBOQCell('${item.id}','quantity',this.value,this)"></td>
-        <td>${rate ? formatMoney(rate) : '—'}</td>
+        <td><input type="number" step="any" value="${rate || ''}" placeholder="0.00" style="${cellStyle} width:80px;" onblur="saveBOQRate('${item.id}',this)"></td>
         <td class="qty">${amount !== null ? formatMoney(amount) : '—'}</td>
         <td><button class="delete-btn" onclick="deleteBOQItem('${item.id}')">✕</button></td>
       </tr>`;
@@ -1836,6 +1836,31 @@
       // table, so that one case needs a full refresh; other fields can
       // save silently without disturbing the rest of the grid.
       if (field === 'quantity') loadBOQ();
+    } catch (e) {
+      inputEl.style.borderColor = '#ff4d4d';
+      alert('Save failed: ' + e.message);
+    }
+  }
+
+  async function saveBOQRate(boqItemId, inputEl) {
+    const rateVal = inputEl.value;
+    if (rateVal === '' || isNaN(parseFloat(rateVal))) {
+      inputEl.style.borderColor = '#ff4d4d';
+      return;
+    }
+    const rate = parseFloat(rateVal);
+    try {
+      const existing = await supaGet(`cost_items?select=id&boq_item_id=eq.${boqItemId}&limit=1`);
+      if (existing && existing.length > 0) {
+        await supaPatch(`cost_items?id=eq.${existing[0].id}`, { unit_rate: rate });
+      } else {
+        await supaPost('cost_items', { project_id: currentProjectId, boq_item_id: boqItemId, unit_rate: rate }, false);
+      }
+      inputEl.style.borderColor = '#3fb950';
+      setTimeout(() => { inputEl.style.borderColor = 'transparent'; }, 1200);
+      // Rate affects this row's Amount and every subtotal/grand total on
+      // the page, so (unlike description/unit/code) this needs a refresh.
+      loadBOQ();
     } catch (e) {
       inputEl.style.borderColor = '#ff4d4d';
       alert('Save failed: ' + e.message);
