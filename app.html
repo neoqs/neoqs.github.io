@@ -176,6 +176,7 @@
       <p class="hint" id="tk_drawingHint">Upload a drawing as an image (JPG/PNG) or a full PDF drawing set. Then tap two points on a known dimension to calibrate scale, or scan for printed numbers.</p>
       <input type="file" id="tk_drawingFile" accept="image/*,application/pdf" onchange="loadDrawingFile(event)">
       <div class="status" id="tk_pdfLoadStatus"></div>
+      <div id="tk_classBanner" style="display:none; margin-top:10px; padding:12px; border-radius:8px; border:1px solid #30363d;"></div>
       <div id="tk_pageNav" style="display:none; align-items:center; gap:8px; margin-top:10px;">
         <button class="btn secondary" style="margin-top:0; width:auto; padding:8px 14px;" onclick="goToPage(-1)">‹ Prev</button>
         <div style="flex:1; text-align:center; color:#8b949e; font-size:13px;" id="tk_pageLabel">Page 1 of 1</div>
@@ -984,6 +985,171 @@
     updateTakeoffPreview();
   }
 
+  // ===================== TAKEOFF: DRAWING TYPE CLASSIFIER =====================
+  // Decides whether a PDF page is VECTOR (real geometry that can be read
+  // exactly), SCANNED (just a picture - nothing to parse), HYBRID (a picture
+  // with real vector content on top), or UNKNOWN (too little content).
+  // Automated takeoff only proceeds on content that can be read exactly;
+  // it never guesses measurements from pixels.
+  // The block between the BEGIN/END markers touches no page elements, so the
+  // exact same code can be tested outside the browser.
+  // ===== DRAWING CLASSIFIER (BEGIN) =====
+  const DRAWING_THRESHOLDS = {
+    vectorMinSegments: 200,   // fewer drawn line/curve segments than this = no real drawing geometry
+    bigImageCoverage: 0.5     // images covering this much of the page = the page is a picture
+  };
+
+  // Counts line/curve segments inside one constructPath operation.
+  // pdf.js 3.x (the version this app loads) stores [opsArray, coordsArray];
+  // newer pdf.js stores [paintOp, flatData, minMax]. Both are handled.
+  function countPathSegments(args) {
+    const OPS = pdfjsLib.OPS;
+    if (!args) return 0;
+    // pdf.js 3.x (the version this app loads): [opsArray, coordsArray]
+    if (Array.isArray(args[0])) {
+      let n = 0;
+      for (const op of args[0]) {
+        if (op === OPS.lineTo || op === OPS.curveTo || op === OPS.curveTo2 || op === OPS.curveTo3) n += 1;
+        else if (op === OPS.rectangle) n += 4;
+      }
+      return n;
+    }
+    // Newer pdf.js: [paintOp, data, minMax]. data is a flat stream - draw op code
+    // followed by its coordinates - and some versions wrap it in an outer array.
+    // Draw ops: 0 moveTo(+2) 1 lineTo(+2) 2 curveTo(+6) 3 quadraticCurveTo(+4) 4 closePath
+    const data = args[1];
+    if (!data) return 0;
+    const streams = (Array.isArray(data) && data.length && (Array.isArray(data[0]) || ArrayBuffer.isView(data[0]))) ? data : [data];
+    let n = 0;
+    for (const s of streams) {
+      let i = 0;
+      while (i < s.length) {
+        const op = s[i];
+        if (op === 0) i += 3;
+        else if (op === 1) { n += 1; i += 3; }
+        else if (op === 2) { n += 1; i += 7; }
+        else if (op === 3) { n += 1; i += 5; }
+        else if (op === 4) { n += 1; i += 1; }
+        else break; // unrecognised layout: stop rather than miscount
+      }
+    }
+    return n;
+  }
+
+  // Reads what a PDF page is made of: drawn segments, text items, and how
+  // much of the page is covered by images (tracking the coordinate
+  // transforms so an image placed via nested scaling is measured correctly).
+  async function extractPageFeatures(page) {
+    const OPS = pdfjsLib.OPS;
+    const imageOps = new Set([
+      OPS.paintImageXObject, OPS.paintInlineImageXObject,
+      OPS.paintImageMaskXObject, OPS.paintImageXObjectRepeat
+    ]);
+    const view = page.view;
+    const pageArea = Math.abs((view[2] - view[0]) * (view[3] - view[1])) || 1;
+    const opList = await page.getOperatorList();
+
+    let pathSegs = 0, pathOps = 0, imgCount = 0, imgArea = 0, det = 1;
+    const detStack = [];
+    for (let i = 0; i < opList.fnArray.length; i++) {
+      const fn = opList.fnArray[i], args = opList.argsArray[i];
+      if (fn === OPS.save) detStack.push(det);
+      else if (fn === OPS.restore) { if (detStack.length) det = detStack.pop(); }
+      else if (fn === OPS.transform) det *= (args[0] * args[3] - args[1] * args[2]);
+      else if (fn === OPS.paintFormXObjectBegin) {
+        detStack.push(det);
+        if (args && args[0] && args[0].length >= 4) det *= (args[0][0] * args[0][3] - args[0][1] * args[0][2]);
+      }
+      else if (fn === OPS.paintFormXObjectEnd) { if (detStack.length) det = detStack.pop(); }
+      else if (fn === OPS.constructPath) { pathOps += 1; pathSegs += countPathSegments(args); }
+      else if (fn === OPS.lineTo || fn === OPS.curveTo) pathSegs += 1;
+      else if (fn === OPS.rectangle) pathSegs += 4;
+      else if (imageOps.has(fn)) { imgCount += 1; imgArea += Math.abs(det); }
+    }
+
+    // Safety net: if path operations exist but their layout wasn't recognised
+    // (a different pdf.js version), count the operations themselves - each
+    // draws at least one segment - instead of reporting zero.
+    if (pathSegs === 0 && pathOps > 0) pathSegs = pathOps;
+
+    const text = await page.getTextContent();
+    const items = text.items.filter(it => it.str && it.str.trim().length > 0);
+    const dimTextItems = items.filter(it => /^\d{2,6}(\.\d+)?$/.test(it.str.trim())).length;
+
+    return {
+      pathSegs: pathSegs,
+      textItems: items.length,
+      dimTextItems: dimTextItems,
+      imgCount: imgCount,
+      imgCoverage: imgArea / pageArea
+    };
+  }
+
+  function classifyDrawing(f) {
+    const hasVector = f.pathSegs >= DRAWING_THRESHOLDS.vectorMinSegments;
+    const bigImage = f.imgCoverage >= DRAWING_THRESHOLDS.bigImageCoverage;
+    if (bigImage && hasVector) return 'hybrid';
+    if (bigImage) return 'scanned';
+    if (hasVector) return 'vector';
+    return 'unknown';
+  }
+  // ===== DRAWING CLASSIFIER (END) =====
+
+  // Read by the automated-extraction step: 'vector' | 'hybrid' | 'scanned' | 'unknown' | null
+  let currentDrawingClass = null;
+
+  function styleClassBanner(el, look) {
+    el.style.display = 'block';
+    el.style.background = look.bg;
+    el.style.borderColor = look.border;
+    el.style.color = look.color;
+  }
+
+  function showDrawingClassPending() {
+    currentDrawingClass = null;
+    const el = document.getElementById('tk_classBanner');
+    styleClassBanner(el, { bg: '#161b22', border: '#30363d', color: '#8b949e' });
+    el.textContent = 'Checking what kind of drawing this is…';
+  }
+
+  function showDrawingClassError(pageNum) {
+    currentDrawingClass = 'unknown';
+    const el = document.getElementById('tk_classBanner');
+    styleClassBanner(el, { bg: '#2d0d0d', border: '#8b2c2c', color: '#ff9b9b' });
+    el.textContent = (pageNum ? 'Page ' + pageNum + ': ' : '') +
+      'Could not analyze this page, so automated takeoff is not supported for it. Use tap-to-measure instead.';
+  }
+
+  function showDrawingClass(cls, f, isImageFile, pageNum) {
+    currentDrawingClass = cls;
+    const el = document.getElementById('tk_classBanner');
+    const pct = f ? Math.min(100, Math.round(f.imgCoverage * 100)) : 100;
+    const where = pageNum ? 'Page ' + pageNum + ': ' : '';
+    const looks = {
+      vector:  { bg: '#0d2818', border: '#2ea043', color: '#7ee787', title: 'Vector drawing — automated takeoff supported' },
+      hybrid:  { bg: '#2b2100', border: '#9e6a00', color: '#e3b341', title: 'Hybrid drawing — partially supported' },
+      scanned: { bg: '#2d0d0d', border: '#8b2c2c', color: '#ff9b9b', title: 'Scanned drawing — automated takeoff not supported' },
+      unknown: { bg: '#2d0d0d', border: '#8b2c2c', color: '#ff9b9b', title: 'Drawing type unclear — automated takeoff not supported' }
+    }[cls];
+    let detail;
+    if (cls === 'vector') {
+      detail = 'Read directly from the file: ' + f.pathSegs + ' line segments and ' + f.textItems + ' text items found (' + f.dimTextItems + ' look like dimensions).' +
+        (f.imgCoverage >= 0.05 ? ' Embedded images covering ' + pct + '% of the page are ignored.' : '');
+    } else if (cls === 'hybrid') {
+      detail = 'This page mixes real vector lines with a scanned picture covering ' + pct + '% of the page. Only the vector content can be read; the scanned part is ignored, so check results against the drawing.';
+    } else if (cls === 'scanned') {
+      detail = (isImageFile
+        ? 'This is an image file, which holds only pixels, so exact geometry cannot be read from it. '
+        : 'This page is a picture of a drawing (' + pct + '% image, only ' + f.pathSegs + ' line segments), so exact geometry cannot be read from it. ') +
+        'Use "Scan for Printed Dimensions" (OCR, approximate) or tap-to-measure instead. For automated takeoff, ask for a PDF exported directly from CAD, not scanned.';
+    } else {
+      detail = 'Too little drawing content to classify (' + f.pathSegs + ' line segments, ' + f.textItems + ' text items). Use tap-to-measure instead.';
+    }
+    styleClassBanner(el, looks);
+    el.innerHTML = '<div style="font-weight:700;">' + escapeHtml(where + looks.title) + '</div>' +
+      '<div style="font-size:12px;margin-top:4px;">' + escapeHtml(detail) + '</div>';
+  }
+
   // ===================== TAKEOFF: PDF SUPPORT =====================
   let pdfDoc = null;
   let pdfCurrentPage = 1;
@@ -998,6 +1164,7 @@
       pdfDoc = null;
       document.getElementById('tk_pageNav').style.display = 'none';
       loadImageFromSource(URL.createObjectURL(file));
+      showDrawingClass('scanned', null, true);
     }
   }
 
@@ -1044,6 +1211,7 @@
   }
 
   async function renderPDFPage(pageNum) {
+    showDrawingClassPending();
     const page = await pdfDoc.getPage(pageNum);
     // Render at a higher internal scale so zooming later reveals real detail
     const viewport = page.getViewport({ scale: 2.5 });
@@ -1054,6 +1222,12 @@
     await page.render({ canvasContext: tempCtx, viewport: viewport }).promise;
     document.getElementById('tk_pageLabel').textContent = `Page ${pageNum} of ${pdfTotalPages}`;
     loadImageFromSource(tempCanvas.toDataURL());
+    try {
+      const features = await extractPageFeatures(page);
+      showDrawingClass(classifyDrawing(features), features, false, pageNum);
+    } catch (e) {
+      showDrawingClassError(pageNum);
+    }
   }
 
   function goToPage(delta) {
