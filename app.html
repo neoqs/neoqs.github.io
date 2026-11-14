@@ -846,10 +846,16 @@
     return parseFloat(String(val).replace(/,/g, ''));
   }
 
+  // A saved value that is not a real project id (for example the text "null") is ignored,
+  // so it can never stop the app from finding the user's actual project.
   function getSavedProjectId() {
-    try { return localStorage.getItem('neoqs_current_project'); } catch (e) { return null; }
+    try {
+      const v = localStorage.getItem('neoqs_current_project');
+      return (v && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) ? v : null;
+    } catch (e) { return null; }
   }
   function saveProjectId(id) {
+    if (!id) return;   // never store "no project" - localStorage would keep it as the text "null"
     try { localStorage.setItem('neoqs_current_project', id); } catch (e) { /* ignore if unavailable */ }
   }
 
@@ -857,17 +863,19 @@
     try {
       const savedId = getSavedProjectId();
       if (savedId) {
-        const check = await supaGet(`projects?select=id&id=eq.${savedId}&limit=1`);
-        if (check && check.length > 0) {
-          currentProjectId = savedId;
-          return;
-        }
+        try {
+          const check = await supaGet(`projects?select=id&id=eq.${savedId}&limit=1`);
+          if (check && check.length > 0) {
+            currentProjectId = savedId;
+            return;
+          }
+        } catch (e) { /* an unusable saved project must not stop us picking another one */ }
       }
       const existing = await supaGet('projects?select=id&order=created_at.desc&limit=1');
       if (existing && existing.length > 0) {
         currentProjectId = existing[0].id;
       } else {
-        const created = await supaPost('projects', { name: 'My First Project' }, true);
+        const created = await supaPost('projects', { name: 'My First Project', user_id: currentUser ? currentUser.id : null }, true);
         currentProjectId = created[0].id;
       }
       saveProjectId(currentProjectId);
@@ -927,7 +935,7 @@
         currentProjectId = null;
         try { localStorage.removeItem('neoqs_current_project'); } catch (e) {}
         await ensureProject();
-        await switchProject(currentProjectId);
+        if (currentProjectId) await switchProject(currentProjectId);
       }
       await loadProjectsList();
     } catch (e) {
@@ -1473,6 +1481,7 @@
     if (!vecScale || !vecScale.mmPerPt) { showStatus('tk_vecStatus', 'error', 'No scale was found on this sheet, so lengths cannot be measured here.'); return; }
     vecMeasureActive = !vecMeasureActive;
     if (vecMeasureActive && countModeActive) toggleCountMode();
+    if (vecMeasureActive) resetDrawingPoints();   // clear the old two-tap tool's green dots so they are not mistaken for this measurement
     if (!vecMeasureActive) vecPoints = [];
     updateVecMeasureUI(); redrawCanvas();
   }
