@@ -179,17 +179,29 @@
       <div id="tk_classBanner" style="display:none; margin-top:10px; padding:12px; border-radius:8px; border:1px solid #30363d;"></div>
       <div id="tk_vecTools" style="display:none; margin-top:12px; padding:12px; border:1px solid #30363d; border-radius:8px; background:#161b22;">
         <div style="font-weight:700; margin-bottom:4px;">Take off by element</div>
-        <p class="hint" style="margin:0 0 8px 0;">Show one kind of element, then tap along it. Each tap snaps to an exact corner in the file. Zoom in when corners are close together, so the tap lands on the one you mean.</p>
+        <p class="hint" style="margin:0 0 8px 0;">Show one kind of element, then tap along it. Pick Walls to measure a whole wall run in one tap, on the face you choose.</p>
         <div id="tk_elemChips" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;"></div>
+        <div id="tk_vecMethodRow" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;"></div>
         <div class="status" id="tk_vecStatus"></div>
         <p class="hint" id="tk_vecScaleLine"></p>
         <input type="text" id="tk_vecItemName" placeholder="Item name, e.g. External walls">
         <button class="btn" id="tk_vecMeasureBtn" onclick="toggleVecMeasure()">Start measuring</button>
         <div id="tk_vecMeasurePanel" style="display:none; margin-top:10px; background:#0d2818; border:1px solid #2ea043; border-radius:8px; padding:12px;">
-          <div style="font-size:20px; font-weight:700; color:#7ee787; margin-bottom:8px;">Length so far: <span id="tk_vecLength">0.00</span> m <span style="font-size:13px; color:#8b949e; font-weight:400;">· <span id="tk_vecPointCount">0</span> corners</span></div>
-          <div style="display:flex; gap:8px;">
-            <button class="btn secondary" style="margin-top:0;" onclick="undoVecPoint()">Undo corner</button>
-            <button class="btn" style="margin-top:0;" onclick="finishVecItem()">Finish item</button>
+          <div id="tk_vecRunBox" style="display:none;">
+            <div id="tk_vecProposalInfo" style="font-size:15px; margin-bottom:8px;"></div>
+            <div id="tk_vecProposalBtns" style="display:none; gap:8px; flex-wrap:wrap;">
+              <button class="btn" style="margin-top:0;" onclick="addVecRun()">Add run</button>
+              <button class="btn secondary" style="margin-top:0;" onclick="nextVecProposal()">Other option</button>
+              <button class="btn secondary" style="margin-top:0;" onclick="cancelVecProposal()">Cancel</button>
+            </div>
+            <div id="tk_vecItemTotal" style="margin-top:8px; font-size:13px; color:#8b949e;"></div>
+          </div>
+          <div id="tk_vecCornersBox">
+            <div style="font-size:20px; font-weight:700; color:#7ee787; margin-bottom:8px;">Length so far: <span id="tk_vecLength">0.00</span> m <span style="font-size:13px; color:#8b949e; font-weight:400;">· <span id="tk_vecPointCount">0</span> corners</span></div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn secondary" style="margin-top:0;" onclick="undoVecPoint()">Undo corner</button>
+              <button class="btn" style="margin-top:0;" onclick="finishVecItem()">Add to item</button>
+            </div>
           </div>
         </div>
         <div id="tk_vecItems"></div>
@@ -200,7 +212,7 @@
         <button class="btn secondary" style="margin-top:0; width:auto; padding:8px 14px;" onclick="goToPage(1)">Next ›</button>
       </div>
       <div id="tk_canvasWrap" style="display:none; margin-top:12px;">
-        <button class="btn secondary" onclick="runOCR()">Scan for Printed Dimensions</button>
+        <button class="btn secondary" id="tk_ocrBtn" onclick="runOCR()">Scan for Printed Dimensions</button>
         <div class="status" id="tk_ocrStatus"></div>
         <div id="tk_ocrResults" style="display:none; margin-bottom:12px;">
           <p class="hint">Tap a detected number to use it as Dimension 1 (assumed millimetres, converted to metres). Check each one against the drawing before trusting it — OCR can misread digits.</p>
@@ -1099,15 +1111,39 @@
 
     const text = await page.getTextContent();
     const items = text.items.filter(it => it.str && it.str.trim().length > 0);
-    const dimTextItems = items.filter(it => /^\d{2,6}(\.\d+)?$/.test(it.str.trim())).length;
+    const tb = findTitleBlock(items);
+    const fileInfoItems = items.filter(it => /^\d+$/.test(it.str.trim()) && isFileInfoItem(it, tb)).length;
+    const dimTextItems = items.filter(it => /^\d{2,6}(\.\d+)?$/.test(it.str.trim()) && !isFileInfoItem(it, tb)).length;
 
     return {
       pathSegs: pathSegs,
       textItems: items.length,
       dimTextItems: dimTextItems,
+      fileInfoItems: fileInfoItems,
       imgCount: imgCount,
       imgCoverage: imgArea / pageArea
     };
+  }
+
+  // Finds the title block (client, designer, scale, sheet number, date...) so its numbers are never
+  // mistaken for dimensions. Needs at least three words that only occur in title blocks.
+  const TITLE_BLOCK_WORDS = /^(client|designed by|drawn by|checked by|drawing tit\w*|sheet no)\b/i;
+  function findTitleBlock(textItems) {
+    const hits = [], kinds = new Set();
+    for (const it of textItems) {
+      const s = (it.str || '').trim();
+      if (!s || s.length > 28) continue;
+      const m = TITLE_BLOCK_WORDS.exec(s);
+      if (m) { hits.push(it); kinds.add(m[1].toLowerCase()); }
+    }
+    if (kinds.size < 3) return null;
+    return { x0: Math.min(...hits.map(i => i.transform[4])) - 20, y1: Math.max(...hits.map(i => i.transform[5])) + 25 };
+  }
+  // Sheet information rather than a dimension: inside the title block, or too long to be one (phone numbers).
+  function isFileInfoItem(item, titleBlock) {
+    const s = (item.str || '').trim();
+    if (/^\d{6,}$/.test(s)) return true;
+    return !!titleBlock && item.transform[4] > titleBlock.x0 && item.transform[5] < titleBlock.y1;
   }
 
   function classifyDrawing(f) {
@@ -1147,6 +1183,11 @@
 
   function showDrawingClass(cls, f, isImageFile, pageNum) {
     currentDrawingClass = cls;
+    // On vector pages the exact text is already read from the file, so the pixel-reading scan is only offered where it is the only option.
+    const ocrBtn = document.getElementById('tk_ocrBtn'), ocrRes = document.getElementById('tk_ocrResults'), ocrSt = document.getElementById('tk_ocrStatus');
+    const vectorPage = (cls === 'vector' || cls === 'hybrid');
+    if (ocrBtn) ocrBtn.style.display = vectorPage ? 'none' : '';
+    if (vectorPage) { if (ocrRes) ocrRes.style.display = 'none'; if (ocrSt) ocrSt.textContent = ''; }
     const el = document.getElementById('tk_classBanner');
     const pct = f ? Math.min(100, Math.round(f.imgCoverage * 100)) : 100;
     const where = pageNum ? 'Page ' + pageNum + ': ' : '';
@@ -1158,7 +1199,7 @@
     }[cls];
     let detail;
     if (cls === 'vector') {
-      detail = 'Read directly from the file: ' + f.pathSegs + ' line segments and ' + f.textItems + ' text items found (' + f.dimTextItems + ' look like dimensions).' +
+      detail = 'Read directly from the file: ' + f.pathSegs + ' line segments and ' + f.textItems + ' text items found (' + f.dimTextItems + ' look like dimensions' + (f.fileInfoItems ? '; ' + f.fileInfoItems + ' title-block numbers set aside' : '') + ').' +
         (f.imgCoverage >= 0.05 ? ' Embedded images covering ' + pct + '% of the page are ignored.' : '');
     } else if (cls === 'hybrid') {
       detail = 'This page mixes real vector lines with a scanned picture covering ' + pct + '% of the page. Only the vector content can be read; the scanned part is ignored, so check results against the drawing.';
@@ -1368,19 +1409,184 @@
     for (let i = 1; i < points.length; i++) t += Math.hypot(points[i][0] - points[i-1][0], points[i][1] - points[i-1][1]);
     return t * mmPerPt;
   }
+
+  // Every single-number text on the page that could be a dimension (title-block information excluded),
+  // with the two lines it sits between. `verified` = the number equals that gap at the sheet's scale.
+  function findPrintedDimensions(segs, items, mmPerPt, opts) {
+    const rel = (opts && opts.rel) || 0.002, centred = (opts && opts.centred) || 0.4;
+    const tb = findTitleBlock(items);
+    const V = [], H = [];
+    for (const s of segs) {
+      if (s[5]) continue;
+      if (Math.abs(s[0] - s[2]) < 0.05 && Math.abs(s[1] - s[3]) > 1) V.push(s);
+      else if (Math.abs(s[1] - s[3]) < 0.05 && Math.abs(s[0] - s[2]) > 1) H.push(s);
+    }
+    const out = [];
+    for (const it of items) {
+      const str = (it.str || '').trim();
+      if (!/^\d{3,5}$/.test(str) || isFileInfoItem(it, tb)) continue;
+      const a = it.transform[0], b = it.transform[1], len = Math.hypot(a, b) || 1, vert = Math.abs(b) > Math.abs(a);
+      const cx = it.transform[4] + a / len * it.width / 2, cy = it.transform[5] + b / len * it.width / 2;
+      const c = vert ? cy : cx, lines = vert ? H : V;
+      const left = new Set(), right = new Set();
+      let lo = -Infinity, hi = Infinity;
+      for (const s of lines) {
+        const reach = vert ? (Math.min(s[0], s[2]) - 10 <= cx && cx <= Math.max(s[0], s[2]) + 10)
+                           : (Math.min(s[1], s[3]) - 10 <= cy && cy <= Math.max(s[1], s[3]) + 10);
+        if (!reach) continue;
+        const p = vert ? s[1] : s[0];
+        if (p < c - 1) { left.add(Math.round(p * 20) / 20); if (p > lo) lo = p; }
+        else if (p > c + 1) { right.add(Math.round(p * 20) / 20); if (p < hi) hi = p; }
+      }
+      // The two lines this number sits between are the pair exactly its value apart, at the sheet's scale
+      // (a long dimension crosses other lines, so the nearest line on each side is often the wrong one).
+      const want = +str / mmPerPt, tolPt = Math.max(rel * want, 0.12);
+      let best = null;
+      for (const a of left) for (const b of right) {
+        if (Math.abs((b - a) - want) > tolPt) continue;
+        const asym = Math.abs((c - a) - (b - c));
+        if (asym > centred * (b - a)) continue;
+        if (!best || asym < best.asym) best = { lo: a, hi: b, asym: asym };
+      }
+      if (best) { out.push({ value: +str, vert: vert, lo: best.lo, hi: best.hi, verified: true }); continue; }
+      out.push({ value: +str, vert: vert, lo: lo, hi: hi, verified: false });
+    }
+    return out;
+  }
+
+  // Maximal straight runs of one element's lines (collinear, touching pieces joined). Horizontal or vertical only.
+  function buildRuns(segs, key) {
+    const buckets = { h: new Map(), v: new Map() };
+    for (const s of segs) {
+      if (s[5] !== key) continue;
+      const dx = Math.abs(s[2] - s[0]), dy = Math.abs(s[3] - s[1]);
+      let horiz, c, a, b;
+      if (dy < 0.05 && dx > 0.3) { horiz = true; c = s[1]; a = Math.min(s[0], s[2]); b = Math.max(s[0], s[2]); }
+      else if (dx < 0.05 && dy > 0.3) { horiz = false; c = s[0]; a = Math.min(s[1], s[3]); b = Math.max(s[1], s[3]); }
+      else continue;
+      const m = horiz ? buckets.h : buckets.v, k = Math.round(c * 5);
+      if (!m.has(k)) m.set(k, { c: c, iv: [] });
+      m.get(k).iv.push([a, b]);
+    }
+    const runs = [];
+    for (const [horiz, m] of [[true, buckets.h], [false, buckets.v]]) for (const g of m.values()) {
+      g.iv.sort((p, q) => p[0] - q[0]);
+      let cur = g.iv[0].slice();
+      const push = () => { if (cur[1] - cur[0] >= 1) runs.push({ horiz: horiz, c: g.c, a0: cur[0], a1: cur[1], face: 'unknown', thickness: null }); };
+      for (const v of g.iv.slice(1)) { if (v[0] <= cur[1] + 0.3) cur[1] = Math.max(cur[1], v[1]); else { push(); cur = v.slice(); } }
+      push();
+    }
+    return runs;
+  }
+
+  // Which side of a wall faces outside? Pair each run with the parallel run on the other side of the wall
+  // (120-450 mm away), then look outward from it: if open space lies beyond it (no wall, door or window line),
+  // it is an outer face; if another wall is in the way, it faces a room.
+  // A very long line with no wall on its other side (a grid line sitting on a wall layer) is not a wall:
+  // it is marked `stray`, never blocks the view, and is never offered as a wall run.
+  function classifyFaces(runs, blockers, mmPerPt) {
+    const tMin = 120 / mmPerPt, tMax = 450 / mmPerPt, skip = 2, strayLen = 12000 / mmPerPt;
+    for (const r of runs) {
+      r.partner = null; r.stray = false; r.face = 'unknown'; r.thickness = null;
+      let left = false, right = false;
+      for (const q of runs) {
+        if (q === r || q.horiz !== r.horiz) continue;
+        const d = Math.abs(q.c - r.c);
+        if (d < tMin || d > tMax) continue;
+        const ov0 = Math.max(r.a0, q.a0), ov1 = Math.min(r.a1, q.a1);
+        if (ov1 - ov0 < Math.max(3, 0.5 * Math.min(r.a1 - r.a0, q.a1 - q.a0))) continue;
+        if (q.c > r.c) right = true; else left = true;
+        if (!r.partner || d < r.partner.d) r.partner = { d: d, dir: Math.sign(q.c - r.c), ov0: ov0, ov1: ov1 };
+      }
+      r.bothSides = left && right;
+    }
+    // Footprint of the ordinary paired wall runs. A wall never reaches beyond the building, a grid line does.
+    let fx0 = Infinity, fx1 = -Infinity, fy0 = Infinity, fy1 = -Infinity;
+    for (const r of runs) {
+      if (!r.partner || (r.a1 - r.a0) > strayLen) continue;
+      if (r.horiz) { fx0 = Math.min(fx0, r.a0); fx1 = Math.max(fx1, r.a1); fy0 = Math.min(fy0, r.c); fy1 = Math.max(fy1, r.c); }
+      else { fy0 = Math.min(fy0, r.a0); fy1 = Math.max(fy1, r.a1); fx0 = Math.min(fx0, r.c); fx1 = Math.max(fx1, r.c); }
+    }
+    const m = 1000 / mmPerPt;
+    for (const r of runs) {
+      if ((r.a1 - r.a0) <= strayLen) continue;
+      // a wall face has material on one side only; faces on both sides means a centre-line
+      const beyond = isFinite(fx0) && (r.horiz ? (r.a0 < fx0 - m || r.a1 > fx1 + m) : (r.a0 < fy0 - m || r.a1 > fy1 + m));
+      if (!r.partner || r.bothSides || beyond) r.stray = true;
+    }
+    const real = runs.filter(r => !r.stray);
+    const H = [], V = [];
+    for (const r of real) (r.horiz ? H : V).push([r.c, r.a0, r.a1]);
+    // Door and window lines only count where they sit inside a wall's thickness (that is where a real
+    // opening is). Some files also put long unrelated lines on window layers; those must not block the view.
+    const inWallZone = (horiz, c, a0, a1) => real.some(r => r.horiz === horiz && Math.abs(r.c - c) <= 500 / mmPerPt && Math.min(a1, r.a1) - Math.max(a0, r.a0) > 0);
+    for (const s of blockers) {
+      if (s[5] === 'walls') continue;
+      const dx = Math.abs(s[2] - s[0]), dy = Math.abs(s[3] - s[1]);
+      if (dy < 0.05 && dx > 0.3) { const a0 = Math.min(s[0], s[2]), a1 = Math.max(s[0], s[2]); if (inWallZone(true, s[1], a0, a1)) H.push([s[1], a0, a1]); }
+      else if (dx < 0.05 && dy > 0.3) { const a0 = Math.min(s[1], s[3]), a1 = Math.max(s[1], s[3]); if (inWallZone(false, s[0], a0, a1)) V.push([s[0], a0, a1]); }
+    }
+    for (const r of real) {
+      const best = r.partner; if (!best) continue;
+      r.thickness = best.d * mmPerPt;
+      const out = -best.dir, lines = r.horiz ? H : V;
+      let escapes = 0;
+      for (const t of [0.15, 0.3, 0.5, 0.7, 0.85]) {
+        const a = best.ov0 + t * (best.ov1 - best.ov0);
+        let hit = false;
+        for (const L of lines) { if (a < L[1] || a > L[2]) continue; if ((L[0] - r.c) * out > skip) { hit = true; break; } }
+        if (!hit) escapes++;
+      }
+      r.escapes = escapes;
+      r.face = escapes >= 2 ? 'outer' : 'inner';
+    }
+    return runs;
+  }
+
+  // Runs near a tap (page units), nearest first. face: 'outer' | 'inner' | 'any'. A tap anywhere across a
+  // wall's thickness reaches both of its faces, so the chosen face never depends on tapping between two lines.
+  function proposeRuns(runs, face, x, y, tol, mmPerPt) {
+    const out = [];
+    for (const r of runs) {
+      if (r.stray) continue;
+      if (face !== 'any' && r.face !== face) continue;
+      const along = r.horiz ? x : y, across = r.horiz ? y : x;
+      if (along < r.a0 - tol || along > r.a1 + tol) continue;
+      const d = Math.abs(across - r.c), reach = Math.max(tol, (r.thickness ? r.thickness / mmPerPt : 0) + 1);
+      if (d > reach) continue;
+      const dAlong = along < r.a0 ? r.a0 - along : (along > r.a1 ? along - r.a1 : 0);   // a tap on the run itself beats one past its end
+      out.push({ run: r, d: d + dAlong });
+    }
+    out.sort((p, q) => p.d - q.d);
+    return out.map(o => o.run);
+  }
+
+  // The printed dimension that spans exactly this run's two ends, if there is one.
+  function matchPrinted(run, dims) {
+    for (const d of dims) {
+      if (!d.verified || d.vert === run.horiz) continue;   // a vertical dimension measures a vertical run
+      if (Math.abs(d.lo - run.a0) < 0.8 && Math.abs(d.hi - run.a1) < 0.8) return d.value;
+    }
+    return null;
+  }
+
   // ===== VECTOR TAKEOFF CORE (END) =====
 
   // ===== VECTOR TAKEOFF UI (BEGIN) =====
-  let vecPage = null, vecViewport = null, vecConfig = null, vecLayerNames = {};
-  let vecSegs = [], vecSnap = [], vecScale = null;
+  let vecPage = null, vecViewport = null, vecConfig = null, vecLayerNames = {}, vecPageNo = 0;
+  let vecSegs = [], vecSnap = [], vecRuns = [], vecDims = [], vecScale = null, vecFileInfoCount = 0;
   let vecView = { mode: 'all', showOther: true };
+  let vecMethod = 'corners', vecFace = 'outer';
   let vecMeasureActive = false, vecPoints = [];
+  let vecProposals = [], vecProposalIdx = 0, vecLastTap = null;
   let vecItems = [];
   let vecRendering = false, vecRenderAgain = false;
 
   function hideVectorTools() {
     vecPage = null; vecViewport = null; vecConfig = null; vecLayerNames = {};
-    vecSegs = []; vecSnap = []; vecScale = null; vecPoints = []; vecMeasureActive = false;
+    vecSegs = []; vecSnap = []; vecRuns = []; vecDims = []; vecScale = null; vecFileInfoCount = 0;
+    vecPoints = []; vecMeasureActive = false; vecMethod = 'corners';
+    vecProposals = []; vecProposalIdx = 0; vecLastTap = null;
     vecView = { mode: 'all', showOther: true };
     const box = document.getElementById('tk_vecTools');
     if (box) box.style.display = 'none';
@@ -1400,7 +1606,8 @@
 
   async function prepareVectorTools(page, viewport, pageNum) {
     const box = document.getElementById('tk_vecTools');
-    vecPage = page; vecViewport = viewport; vecPoints = []; vecMeasureActive = false;
+    vecPage = page; vecViewport = viewport; vecPageNo = pageNum; vecPoints = []; vecMeasureActive = false; vecMethod = 'corners';
+    vecProposals = []; vecProposalIdx = 0; vecLastTap = null;
     vecView = { mode: 'all', showOther: true };
     box.style.display = 'block';
     showStatus('tk_vecStatus', 'success', 'Reading this page\'s geometry…');
@@ -1415,12 +1622,18 @@
       if (page !== vecPage) return;   // the user moved to another page meanwhile
       vecConfig = config; vecLayerNames = names; vecSegs = segs; vecSnap = buildSnapIndex(segs);
       vecScale = estimateMmPerPoint(segs, items);
+      const mm = vecScale.mmPerPt;
+      vecDims = mm ? findPrintedDimensions(segs, items, mm) : [];
+      vecRuns = mm ? classifyFaces(buildRuns(segs, 'walls'), segs.filter(s => s[5]), mm) : [];
+      const tb = findTitleBlock(items);
+      vecFileInfoCount = items.filter(it => /^\d+$/.test(it.str.trim()) && isFileInfoItem(it, tb)).length;
       const n = { walls: 0, doors: 0, windows: 0 };
       segs.forEach(s => { if (s[5]) n[s[5]]++; });
       const hasLayers = Object.keys(names).length > 0;
-      showStatus('tk_vecStatus', 'success', hasLayers
+      const info = vecFileInfoCount ? ' ' + vecFileInfoCount + ' title-block numbers (sheet no., date, phone) are set aside and never treated as dimensions.' : '';
+      showStatus('tk_vecStatus', 'success', (hasLayers
         ? 'Read ' + segs.length + ' lines: ' + n.walls + ' wall, ' + n.doors + ' door, ' + n.windows + ' window.'
-        : 'Read ' + segs.length + ' lines. This file has no named CAD layers, so it cannot be filtered by element, but taps still snap to corners.');
+        : 'Read ' + segs.length + ' lines. This file has no named CAD layers, so it cannot be filtered by element, but taps still snap to corners.') + info);
       document.getElementById('tk_vecScaleLine').textContent = describeVecScale(vecScale);
       renderVecChips(); updateVecMeasureUI(); renderVecItems();
     } catch (e) {
@@ -1439,9 +1652,29 @@
     for (const key of ['walls', 'doors', 'windows']) html += chip(ELEMENT_LABELS[key], vecView.mode === key, "setElementView('" + key + "')", !hasLayers);
     html += chip(vecView.showOther ? 'Other layers: on' : 'Other layers: off', false, 'toggleOtherLayers()', !hasLayers || vecView.mode === 'all');
     wrap.innerHTML = html;
+    renderVecMethodChips();
   }
 
-  function setElementView(mode) { vecView.mode = mode; renderVecChips(); rerenderPageWithLayers(); }
+  function renderVecMethodChips() {
+    const row = document.getElementById('tk_vecMethodRow');
+    if (!row) return;
+    if (vecView.mode !== 'walls' || !vecRuns.length) { row.innerHTML = ''; return; }
+    const chip = (label, active, handler) =>
+      '<button class="btn secondary" style="width:auto; margin:0; padding:8px 14px;' + (active ? ' background:#238636; border-color:#2ea043; color:#fff;' : '') + '" onclick="' + handler + '">' + label + '</button>';
+    const cap = '<div style="width:100%; font-size:12px; color:#8b949e;">';
+    let html = cap + 'Measure by</div>' + chip('Whole wall run', vecMethod === 'run', "setVecMethod('run')") + chip('Two corners', vecMethod === 'corners', "setVecMethod('corners')");
+    if (vecMethod === 'run') html += cap + 'Which face</div>' + chip('Outer face', vecFace === 'outer', "setVecFace('outer')") + chip('Inner face', vecFace === 'inner', "setVecFace('inner')") + chip('Either', vecFace === 'any', "setVecFace('any')");
+    row.innerHTML = html;
+  }
+
+  function setElementView(mode) {
+    vecView.mode = mode;
+    vecMethod = (mode === 'walls' && vecRuns.length) ? 'run' : 'corners';
+    vecPoints = []; clearVecProposal();
+    renderVecChips(); updateVecMeasureUI(); rerenderPageWithLayers();
+  }
+  function setVecMethod(m) { vecMethod = m; vecPoints = []; clearVecProposal(); renderVecChips(); updateVecMeasureUI(); redrawCanvas(); }
+  function setVecFace(f) { vecFace = f; clearVecProposal(); renderVecChips(); redrawCanvas(); }
   function toggleOtherLayers() { vecView.showOther = !vecView.showOther; renderVecChips(); rerenderPageWithLayers(); }
 
   async function rerenderPageWithLayers() {
@@ -1466,15 +1699,24 @@
   function vecLengthM() {
     return (vecScale && vecScale.mmPerPt && vecPoints.length > 1) ? polylineLengthMm(vecPoints, vecScale.mmPerPt) / 1000 : 0;
   }
+  function vecRunMode() { return vecMethod === 'run' && vecView.mode === 'walls' && vecRuns.length > 0; }
+  function currentItemName() { return ((document.getElementById('tk_vecItemName').value || '').trim()) || ELEMENT_LABELS[vecView.mode] || 'Measured length'; }
+  function vecItemTotal(it) { return it.parts.reduce((a, p) => a + p.lengthM, 0); }
 
   function updateVecMeasureUI() {
     const btn = document.getElementById('tk_vecMeasureBtn'), panel = document.getElementById('tk_vecMeasurePanel');
     if (!btn || !panel) return;
     btn.textContent = vecMeasureActive ? 'Stop measuring' : 'Start measuring';
     panel.style.display = vecMeasureActive ? 'block' : 'none';
+    const runMode = vecRunMode();
+    document.getElementById('tk_vecRunBox').style.display = runMode ? 'block' : 'none';
+    document.getElementById('tk_vecCornersBox').style.display = runMode ? 'none' : 'block';
     document.getElementById('tk_vecLength').textContent = vecLengthM().toFixed(2);
     document.getElementById('tk_vecPointCount').textContent = vecPoints.length;
-    if (vecMeasureActive) document.getElementById('tk_drawingStatus').textContent = 'Measuring: tap corners along the element. Each tap snaps to the nearest corner.';
+    updateVecRunBox();
+    if (vecMeasureActive) document.getElementById('tk_drawingStatus').textContent = runMode
+      ? 'Measuring: tap a wall to propose a whole run. Nothing is added until you press Add run.'
+      : 'Measuring: tap corners along the element. Each tap snaps to the nearest corner.';
   }
 
   function toggleVecMeasure() {
@@ -1482,16 +1724,17 @@
     vecMeasureActive = !vecMeasureActive;
     if (vecMeasureActive && countModeActive) toggleCountMode();
     if (vecMeasureActive) resetDrawingPoints();   // clear the old two-tap tool's green dots so they are not mistaken for this measurement
-    if (!vecMeasureActive) vecPoints = [];
+    if (!vecMeasureActive) { vecPoints = []; clearVecProposal(); }
     updateVecMeasureUI(); redrawCanvas();
   }
 
-  // x, y are canvas pixels. Converts to page units and snaps to the nearest corner of the chosen element.
+  // x, y are canvas pixels. Converts to page units, then either proposes a whole wall run or snaps to a corner.
   function handleVecTap(x, y) {
     const p = vecViewport.convertToPdfPoint(x, y);
     const rect = drawingCanvas.getBoundingClientRect();
     const canvasPxPerCssPx = drawingCanvas.width / rect.width;
     const tol = (14 * canvasPxPerCssPx) / vecViewport.scale;   // 14 screen pixels, in page units
+    if (vecRunMode()) { handleRunTap(p, tol); return; }
     const snapped = snapToElement(vecSnap, vecView.mode, p[0], p[1], tol);
     if (!snapped) { showStatus('tk_vecStatus', 'error', 'No corner of the shown element near that tap. Zoom in and tap closer to a corner.'); return; }
     vecPoints.push(snapped);
@@ -1499,10 +1742,77 @@
     updateVecMeasureUI(); redrawCanvas();
   }
 
-  function undoVecPoint() { vecPoints.pop(); updateVecMeasureUI(); redrawCanvas(); }
+  // Tapping a wall proposes a run; tapping the same spot again moves to the next option.
+  function handleRunTap(p, tol) {
+    const same = vecLastTap && Math.hypot(p[0] - vecLastTap[0], p[1] - vecLastTap[1]) < tol * 0.6;
+    if (same && vecProposals.length > 1) {
+      vecProposalIdx = (vecProposalIdx + 1) % vecProposals.length;
+    } else {
+      vecProposals = proposeRuns(vecRuns, vecFace, p[0], p[1], tol, vecScale.mmPerPt); vecProposalIdx = 0;
+      if (!vecProposals.length) {
+        vecLastTap = null;
+        showStatus('tk_vecStatus', 'error', 'No ' + (vecFace === 'any' ? '' : vecFace + ' ') + 'wall face near that tap. Zoom in and tap on the wall, or choose Either.');
+        updateVecRunBox(); redrawCanvas(); return;
+      }
+    }
+    vecLastTap = p;
+    showStatus('tk_vecStatus', 'success', 'Run proposed. Check it, then press Add run, or tap the same spot again for another option.');
+    updateVecRunBox(); redrawCanvas();
+  }
+
+  function currentProposal() { return vecProposals.length ? vecProposals[vecProposalIdx % vecProposals.length] : null; }
+  function clearVecProposal() { vecProposals = []; vecProposalIdx = 0; vecLastTap = null; updateVecRunBox(); }
+  function nextVecProposal() { if (vecProposals.length > 1) { vecProposalIdx = (vecProposalIdx + 1) % vecProposals.length; updateVecRunBox(); redrawCanvas(); } }
+  function cancelVecProposal() { clearVecProposal(); redrawCanvas(); }
+
+  function describeRun(run) {
+    const len = (run.a1 - run.a0) * vecScale.mmPerPt / 1000;
+    const face = run.face === 'outer' ? 'Outer face' : run.face === 'inner' ? 'Inner face' : 'Wall edge (face not determined)';
+    const printed = matchPrinted(run, vecDims);
+    return { len: len, face: face, printed: printed };
+  }
+
+  function updateVecRunBox() {
+    const info = document.getElementById('tk_vecProposalInfo'), btns = document.getElementById('tk_vecProposalBtns'), tot = document.getElementById('tk_vecItemTotal');
+    if (!info || !btns || !tot) return;
+    const p = currentProposal();
+    if (!p || !vecScale) {
+      info.textContent = 'Tap a wall to propose a run. Nothing is added until you press Add run.';
+      btns.style.display = 'none';
+    } else {
+      const d = describeRun(p);
+      info.innerHTML = '<b>' + escapeHtml(d.face) + ' · ' + d.len.toFixed(2) + ' m</b><br>' +
+        '<span style="color:' + (d.printed ? '#7ee787' : '#e3b341') + ';">' + (d.printed ? 'matches printed ' + d.printed : 'no printed dimension spans exactly this run') + '</span><br>' +
+        '<span style="color:#8b949e; font-size:12px;">Option ' + ((vecProposalIdx % vecProposals.length) + 1) + ' of ' + vecProposals.length + '</span>';
+      btns.style.display = 'flex';
+    }
+    const name = currentItemName();
+    const it = vecItems.find(x => x.name.toLowerCase() === name.toLowerCase() && x.element === vecView.mode);
+    tot.textContent = it ? '"' + it.name + '" so far: ' + vecItemTotal(it).toFixed(2) + ' m (' + it.parts.length + ' run' + (it.parts.length === 1 ? '' : 's') + ')' : '';
+  }
 
   function drawVecPoints() {
-    if (!vecPoints.length || !vecViewport || !drawingCtx) return;
+    if (!vecViewport || !drawingCtx) return;
+    // everything already added to an item stays marked on its page, so nothing is measured twice
+    drawingCtx.save();
+    drawingCtx.strokeStyle = '#a371f7'; drawingCtx.lineWidth = 5; drawingCtx.lineCap = 'round'; drawingCtx.lineJoin = 'round';
+    vecItems.forEach(it => it.parts.forEach(pt => {
+      if (pt.page !== vecPageNo || !pt.line) return;
+      const q = pt.line.map(v => vecViewport.convertToViewportPoint(v[0], v[1]));
+      drawingCtx.beginPath(); q.forEach((v, i) => { if (i) drawingCtx.lineTo(v[0], v[1]); else drawingCtx.moveTo(v[0], v[1]); }); drawingCtx.stroke();
+    }));
+    drawingCtx.restore();
+    const prop = currentProposal();
+    if (prop) {
+      const a = prop.horiz ? [prop.a0, prop.c] : [prop.c, prop.a0], b = prop.horiz ? [prop.a1, prop.c] : [prop.c, prop.a1];
+      const A = vecViewport.convertToViewportPoint(a[0], a[1]), B = vecViewport.convertToViewportPoint(b[0], b[1]);
+      drawingCtx.save();
+      drawingCtx.strokeStyle = '#e3b341'; drawingCtx.lineWidth = 7; drawingCtx.lineCap = 'round';
+      drawingCtx.beginPath(); drawingCtx.moveTo(A[0], A[1]); drawingCtx.lineTo(B[0], B[1]); drawingCtx.stroke();
+      [A, B].forEach(q => { drawingCtx.beginPath(); drawingCtx.arc(q[0], q[1], 11, 0, 2 * Math.PI); drawingCtx.fillStyle = '#f85149'; drawingCtx.fill(); });
+      drawingCtx.restore();
+    }
+    if (!vecPoints.length) return;
     const pts = vecPoints.map(p => vecViewport.convertToViewportPoint(p[0], p[1]));
     drawingCtx.save();
     drawingCtx.strokeStyle = '#f0883e'; drawingCtx.lineWidth = 4; drawingCtx.lineJoin = 'round';
@@ -1513,18 +1823,34 @@
     drawingCtx.restore();
   }
 
-  // Finished runs with the same name and element add up, like a takeoff item in PlanSwift.
+  function undoVecPoint() { vecPoints.pop(); updateVecMeasureUI(); redrawCanvas(); }
+
+  // Runs with the same name and element add up, like a takeoff item in PlanSwift.
+  function addVecPart(lengthM, note, line) {
+    const name = currentItemName();
+    let it = vecItems.find(x => x.name.toLowerCase() === name.toLowerCase() && x.element === vecView.mode);
+    if (!it) { it = { name: name, element: vecView.mode, parts: [] }; vecItems.push(it); }
+    it.parts.push({ lengthM: lengthM, note: note + ', page ' + vecPageNo, page: vecPageNo, line: line || null });
+    return it;
+  }
+
+  function addVecRun() {
+    const run = currentProposal();
+    if (!run) { showStatus('tk_vecStatus', 'error', 'Tap a wall first to propose a run.'); return; }
+    const d = describeRun(run);
+    const line = run.horiz ? [[run.a0, run.c], [run.a1, run.c]] : [[run.c, run.a0], [run.c, run.a1]];
+    const it = addVecPart(d.len, d.face.toLowerCase() + (d.printed ? ', matches printed ' + d.printed : ''), line);
+    clearVecProposal(); renderVecItems(); updateVecMeasureUI(); redrawCanvas();
+    showStatus('tk_vecStatus', 'success', 'Added ' + d.len.toFixed(2) + ' m to "' + it.name + '", now ' + vecItemTotal(it).toFixed(2) + ' m. Tap the next wall.');
+  }
+
   function finishVecItem() {
     if (vecPoints.length < 2) { showStatus('tk_vecStatus', 'error', 'Tap at least two corners first.'); return; }
-    const name = (document.getElementById('tk_vecItemName').value || '').trim() || ELEMENT_LABELS[vecView.mode] || 'Measured length';
     const len = vecLengthM();
-    const existing = vecItems.find(it => it.name.toLowerCase() === name.toLowerCase() && it.element === vecView.mode);
-    if (existing) { existing.lengthM += len; existing.runs += 1; }
-    else vecItems.push({ name: name, element: vecView.mode, lengthM: len, runs: 1, source: vecScale.source });
-    const total = (existing || vecItems[vecItems.length - 1]).lengthM;
+    const it = addVecPart(len, 'two corners', vecPoints.map(p => p.slice()));
     vecPoints = [];
     renderVecItems(); updateVecMeasureUI(); redrawCanvas();
-    showStatus('tk_vecStatus', 'success', (existing ? 'Added to "' : 'Saved "') + name + '" - now ' + total.toFixed(2) + ' m. Tap more corners to add another run.');
+    showStatus('tk_vecStatus', 'success', 'Added ' + len.toFixed(2) + ' m to "' + it.name + '", now ' + vecItemTotal(it).toFixed(2) + ' m. Tap more corners to add another.');
   }
 
   function renderVecItems() {
@@ -1533,28 +1859,38 @@
     if (!vecItems.length) { el.innerHTML = ''; return; }
     el.innerHTML = '<div style="font-weight:700; margin:12px 0 6px;">Measured items</div>' + vecItems.map((it, i) =>
       '<div style="border:1px solid #30363d; border-radius:8px; padding:10px; margin-bottom:8px;">' +
-      '<div><b>' + escapeHtml(it.name) + '</b> — ' + it.lengthM.toFixed(2) + ' m <span style="color:#8b949e; font-size:12px;">(' + it.runs + ' run' + (it.runs === 1 ? '' : 's') + ')</span></div>' +
+      '<div><b>' + escapeHtml(it.name) + '</b> — ' + vecItemTotal(it).toFixed(2) + ' m <span style="color:#8b949e; font-size:12px;">(' + it.parts.length + ' run' + (it.parts.length === 1 ? '' : 's') + ')</span></div>' +
+      it.parts.map((p, j) => '<div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#8b949e; padding:4px 0;"><span>' + p.lengthM.toFixed(2) + ' m · ' + escapeHtml(p.note) + '</span><button class="delete-btn" onclick="removeVecPart(' + i + ',' + j + ')">✕</button></div>').join('') +
       '<div style="display:flex; gap:8px; margin-top:8px;">' +
       '<button class="btn" style="margin:0;" onclick="useVecItem(' + i + ')">Use in Dimension Sheet</button>' +
-      '<button class="btn secondary" style="margin:0; width:auto; padding:8px 14px;" onclick="deleteVecItem(' + i + ')">✕</button></div></div>').join('');
+      '<button class="btn secondary" style="margin:0; width:auto; padding:8px 14px;" onclick="deleteVecItem(' + i + ')">Delete item</button></div></div>').join('');
+  }
+
+  function removeVecPart(i, j) {
+    const it = vecItems[i];
+    if (!it) return;
+    it.parts.splice(j, 1);
+    if (!it.parts.length) vecItems.splice(i, 1);
+    renderVecItems(); updateVecRunBox(); redrawCanvas();
   }
 
   function useVecItem(i) {
     const it = vecItems[i];
     if (!it) return;
+    const total = vecItemTotal(it);
     document.getElementById('tk_description').value = it.name;
     document.getElementById('tk_unit').value = 'm';
     document.getElementById('tk_timesing').value = 1;
-    document.getElementById('tk_dim1').value = it.lengthM.toFixed(2);
+    document.getElementById('tk_dim1').value = total.toFixed(2);
     document.getElementById('tk_dim2').value = '';
     document.getElementById('tk_dim3').value = '';
     updateTakeoffPreview();
-    showStatus('tk_vecStatus', 'success', 'Filled the Dimension Sheet form with "' + it.name + '" (' + it.lengthM.toFixed(2) + ' m). Tap Add Line there to record it.');
+    showStatus('tk_vecStatus', 'success', 'Filled the Dimension Sheet form with "' + it.name + '" (' + total.toFixed(2) + ' m). Tap Add Line there to record it.');
     const f = document.getElementById('tk_description');
     if (f.scrollIntoView) f.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
-  function deleteVecItem(i) { vecItems.splice(i, 1); renderVecItems(); }
+  function deleteVecItem(i) { vecItems.splice(i, 1); renderVecItems(); updateVecRunBox(); redrawCanvas(); }
   // ===== VECTOR TAKEOFF UI (END) =====
 
   // ===================== TAKEOFF: PDF SUPPORT =====================
