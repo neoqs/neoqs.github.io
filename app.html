@@ -184,7 +184,7 @@
         <div id="tk_vecMethodRow" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;"></div>
         <div class="status" id="tk_vecStatus"></div>
         <p class="hint" id="tk_vecScaleLine"></p>
-        <input type="text" id="tk_vecItemName" placeholder="Item name, e.g. External walls">
+        <input type="text" id="tk_vecItemName" placeholder="Item name, e.g. External walls" oninput="updateVecRunBox()">
         <button class="btn" id="tk_vecMeasureBtn" onclick="toggleVecMeasure()">Start measuring</button>
         <div id="tk_vecMeasurePanel" style="display:none; margin-top:10px; background:#0d2818; border:1px solid #2ea043; border-radius:8px; padding:12px;">
           <div id="tk_vecRunBox" style="display:none;">
@@ -492,6 +492,7 @@
 
 </div>
 
+<div id="tk_vecBar" style="display:none; position:fixed; left:0; right:0; bottom:0; z-index:40; background:#0d2818; border-top:2px solid #2ea043; padding:10px 12px calc(10px + env(safe-area-inset-bottom)); box-shadow:0 -4px 16px rgba(0,0,0,0.5);"></div>
 <script>
   // ===================== SHARED CORE =====================
   const SUPABASE_URL = "https://krnhvacnsluescndjobp.supabase.co";
@@ -516,6 +517,7 @@
     document.querySelector('.nav-item[data-section="' + name + '"]').classList.add('active');
     closeDrawer();
     refreshSection(name);
+    if (typeof updateVecBar === 'function') updateVecBar();   // the pinned measuring bar belongs to the Takeoff page only
   }
 
   function refreshSection(name) {
@@ -1713,7 +1715,7 @@
     document.getElementById('tk_vecCornersBox').style.display = runMode ? 'none' : 'block';
     document.getElementById('tk_vecLength').textContent = vecLengthM().toFixed(2);
     document.getElementById('tk_vecPointCount').textContent = vecPoints.length;
-    updateVecRunBox();
+    updateVecRunBox();   // also refreshes the pinned bar
     if (vecMeasureActive) document.getElementById('tk_drawingStatus').textContent = runMode
       ? 'Measuring: tap a wall to propose a whole run. Nothing is added until you press Add run.'
       : 'Measuring: tap corners along the element. Each tap snaps to the nearest corner.';
@@ -1760,6 +1762,42 @@
     updateVecRunBox(); redrawCanvas();
   }
 
+
+  // A bar pinned to the bottom of the screen while measuring, so the proposal, the item total and the
+  // buttons stay in view next to the drawing. It never shows on another page or when not measuring.
+  function updateVecBar() {
+    const bar = document.getElementById('tk_vecBar');
+    if (!bar) return;
+    const sec = document.getElementById('section-takeoff');
+    const onTakeoff = !sec || !sec.classList || sec.classList.contains('active');
+    const show = vecMeasureActive && onTakeoff && !!vecScale;
+    bar.style.display = show ? 'block' : 'none';
+    document.body.style.paddingBottom = show ? '170px' : '';
+    if (!show) return;
+    const name = currentItemName();
+    const it = vecItems.find(x => x.name.toLowerCase() === name.toLowerCase() && x.element === vecView.mode);
+    const itemLine = it ? escapeHtml(it.name) + ': ' + vecItemTotal(it).toFixed(2) + ' m (' + it.parts.length + ' run' + (it.parts.length === 1 ? '' : 's') + ')' : escapeHtml(name) + ': nothing added yet';
+    const btn = (label, handler, primary) => '<button class="btn' + (primary ? '' : ' secondary') + '" style="flex:1; margin:0; padding:11px 6px; font-size:15px;" onclick="' + handler + '">' + label + '</button>';
+    const small = '<div style="font-size:12px; color:#8b949e; margin-bottom:2px;">';
+    const row = '<div style="display:flex; gap:8px;">';
+    let html;
+    if (vecRunMode()) {
+      const p = currentProposal();
+      if (p) {
+        const d = describeRun(p);
+        html = small + itemLine + '</div><div style="font-size:16px; font-weight:700; color:#e6edf3;">' + escapeHtml(d.face) + ' · ' + d.len.toFixed(2) + ' m</div>' +
+          '<div style="font-size:12px; color:' + (d.printed ? '#7ee787' : '#e3b341') + '; margin-bottom:8px;">' + (d.printed ? 'matches printed ' + d.printed : 'no printed dimension spans exactly this run') + ' · option ' + ((vecProposalIdx % vecProposals.length) + 1) + ' of ' + vecProposals.length + '</div>' +
+          row + btn('Add run', 'addVecRun()', true) + (vecProposals.length > 1 ? btn('Other option', 'nextVecProposal()') : '') + btn('Cancel', 'cancelVecProposal()') + '</div>';
+      } else {
+        html = small + itemLine + '</div><div style="font-size:15px; font-weight:600; margin-bottom:8px;">Tap a wall on the drawing to propose a run.</div>' + row + btn('Stop measuring', 'toggleVecMeasure()') + '</div>';
+      }
+    } else {
+      html = small + itemLine + '</div><div style="font-size:16px; font-weight:700; margin-bottom:8px;">Length so far: ' + vecLengthM().toFixed(2) + ' m · ' + vecPoints.length + ' corner' + (vecPoints.length === 1 ? '' : 's') + '</div>' +
+        row + btn('Undo corner', 'undoVecPoint()') + btn('Add to item', 'finishVecItem()', true) + btn('Stop', 'toggleVecMeasure()') + '</div>';
+    }
+    bar.innerHTML = html;
+  }
+
   function currentProposal() { return vecProposals.length ? vecProposals[vecProposalIdx % vecProposals.length] : null; }
   function clearVecProposal() { vecProposals = []; vecProposalIdx = 0; vecLastTap = null; updateVecRunBox(); }
   function nextVecProposal() { if (vecProposals.length > 1) { vecProposalIdx = (vecProposalIdx + 1) % vecProposals.length; updateVecRunBox(); redrawCanvas(); } }
@@ -1789,6 +1827,7 @@
     const name = currentItemName();
     const it = vecItems.find(x => x.name.toLowerCase() === name.toLowerCase() && x.element === vecView.mode);
     tot.textContent = it ? '"' + it.name + '" so far: ' + vecItemTotal(it).toFixed(2) + ' m (' + it.parts.length + ' run' + (it.parts.length === 1 ? '' : 's') + ')' : '';
+    updateVecBar();
   }
 
   function drawVecPoints() {
@@ -1856,7 +1895,7 @@
   function renderVecItems() {
     const el = document.getElementById('tk_vecItems');
     if (!el) return;
-    if (!vecItems.length) { el.innerHTML = ''; return; }
+    if (!vecItems.length) { el.innerHTML = ''; updateVecBar(); return; }
     el.innerHTML = '<div style="font-weight:700; margin:12px 0 6px;">Measured items</div>' + vecItems.map((it, i) =>
       '<div style="border:1px solid #30363d; border-radius:8px; padding:10px; margin-bottom:8px;">' +
       '<div><b>' + escapeHtml(it.name) + '</b> — ' + vecItemTotal(it).toFixed(2) + ' m <span style="color:#8b949e; font-size:12px;">(' + it.parts.length + ' run' + (it.parts.length === 1 ? '' : 's') + ')</span></div>' +
@@ -1864,6 +1903,7 @@
       '<div style="display:flex; gap:8px; margin-top:8px;">' +
       '<button class="btn" style="margin:0;" onclick="useVecItem(' + i + ')">Use in Dimension Sheet</button>' +
       '<button class="btn secondary" style="margin:0; width:auto; padding:8px 14px;" onclick="deleteVecItem(' + i + ')">Delete item</button></div></div>').join('');
+    updateVecBar();
   }
 
   function removeVecPart(i, j) {
